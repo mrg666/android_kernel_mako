@@ -1437,7 +1437,6 @@ static int cred_has_capability(const struct cred *cred,
 			       int cap, int audit)
 {
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct av_decision avd;
 	u16 sclass;
 	u32 sid = cred_sid(cred);
@@ -1445,7 +1444,6 @@ static int cred_has_capability(const struct cred *cred,
 	int rc;
 
 	ad.type = LSM_AUDIT_DATA_CAP;
-	ad.selinux_audit_data = &sad;
 	ad.u.cap = cap;
 
 	switch (CAP_TO_INDEX(cap)) {
@@ -1513,11 +1511,9 @@ static inline int dentry_has_perm(const struct cred *cred,
 {
 	struct inode *inode = dentry->d_inode;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
 	ad.u.dentry = dentry;
-	ad.selinux_audit_data = &sad;
 	return inode_has_perm(cred, inode, av, &ad, 0);
 }
 
@@ -1530,11 +1526,9 @@ static inline int path_has_perm(const struct cred *cred,
 {
 	struct inode *inode = path->dentry->d_inode;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 
 	ad.type = LSM_AUDIT_DATA_PATH;
 	ad.u.path = *path;
-	ad.selinux_audit_data = &sad;
 	return inode_has_perm(cred, inode, av, &ad, 0);
 }
 
@@ -1553,13 +1547,11 @@ static int file_has_perm(const struct cred *cred,
 	struct file_security_struct *fsec = file->f_security;
 	struct inode *inode = file->f_path.dentry->d_inode;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = cred_sid(cred);
 	int rc;
 
 	ad.type = LSM_AUDIT_DATA_PATH;
 	ad.u.path = file->f_path;
-	ad.selinux_audit_data = &sad;
 
 	if (sid != fsec->sid) {
 		rc = avc_has_perm(sid, fsec->sid,
@@ -1589,7 +1581,6 @@ static int may_create(struct inode *dir,
 	struct superblock_security_struct *sbsec;
 	u32 sid, newsid;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	int rc;
 
 	dsec = dir->i_security;
@@ -1600,7 +1591,6 @@ static int may_create(struct inode *dir,
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
 	ad.u.dentry = dentry;
-	ad.selinux_audit_data = &sad;
 
 	rc = avc_has_perm(sid, dsec->sid, SECCLASS_DIR,
 			  DIR__ADD_NAME | DIR__SEARCH,
@@ -1645,7 +1635,6 @@ static int may_link(struct inode *dir,
 {
 	struct inode_security_struct *dsec, *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	u32 av;
 	int rc;
@@ -1655,7 +1644,6 @@ static int may_link(struct inode *dir,
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
 	ad.u.dentry = dentry;
-	ad.selinux_audit_data = &sad;
 
 	av = DIR__SEARCH;
 	av |= (kind ? DIR__REMOVE_NAME : DIR__ADD_NAME);
@@ -1690,7 +1678,6 @@ static inline int may_rename(struct inode *old_dir,
 {
 	struct inode_security_struct *old_dsec, *new_dsec, *old_isec, *new_isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	u32 av;
 	int old_is_dir, new_is_dir;
@@ -1702,7 +1689,6 @@ static inline int may_rename(struct inode *old_dir,
 	new_dsec = new_dir->i_security;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
-	ad.selinux_audit_data = &sad;
 
 	ad.u.dentry = old_dentry;
 	rc = avc_has_perm(sid, old_dsec->sid, SECCLASS_DIR,
@@ -2049,7 +2035,6 @@ static int selinux_bprm_set_creds(struct linux_binprm *bprm)
 	struct task_security_struct *new_tsec;
 	struct inode_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct inode *inode = bprm->file->f_path.dentry->d_inode;
 	int rc;
 
@@ -2089,7 +2074,6 @@ static int selinux_bprm_set_creds(struct linux_binprm *bprm)
 	}
 
 	ad.type = LSM_AUDIT_DATA_PATH;
-	ad.selinux_audit_data = &sad;
 	ad.u.path = bprm->file->f_path;
 
 	if (bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)
@@ -2179,7 +2163,6 @@ static inline void flush_unauthorized_files(const struct cred *cred,
 					    struct files_struct *files)
 {
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct file *file, *devnull = NULL;
 	struct tty_struct *tty;
 	struct fdtable *fdt;
@@ -2213,7 +2196,6 @@ static inline void flush_unauthorized_files(const struct cred *cred,
 	/* Revalidate access to inherited open files. */
 
 	ad.type = LSM_AUDIT_DATA_INODE;
-	ad.selinux_audit_data = &sad;
 
 	spin_lock(&files->file_lock);
 	for (;;) {
@@ -2551,7 +2533,6 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 {
 	const struct cred *cred = current_cred();
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	int rc;
 
 	rc = superblock_doinit(sb, data);
@@ -2563,7 +2544,6 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
-	ad.selinux_audit_data = &sad;
 	ad.u.dentry = sb->s_root;
 	return superblock_has_perm(cred, sb, FILESYSTEM__MOUNT, &ad);
 }
@@ -2572,10 +2552,8 @@ static int selinux_sb_statfs(struct dentry *dentry)
 {
 	const struct cred *cred = current_cred();
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
-	ad.selinux_audit_data = &sad;
 	ad.u.dentry = dentry->d_sb->s_root;
 	return superblock_has_perm(cred, dentry->d_sb, FILESYSTEM__GETATTR, &ad);
 }
@@ -2740,12 +2718,10 @@ static noinline int audit_inode_permission(struct inode *inode,
 					   unsigned flags)
 {
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct inode_security_struct *isec = inode->i_security;
 	int rc;
 
 	ad.type = LSM_AUDIT_DATA_INODE;
-	ad.selinux_audit_data = &sad;
 	ad.u.inode = inode;
 
 	rc = slow_avc_audit(current_sid(), isec->sid, isec->sclass, perms,
@@ -2856,7 +2832,6 @@ static int selinux_inode_setxattr(struct dentry *dentry, const char *name,
 	struct inode_security_struct *isec = inode->i_security;
 	struct superblock_security_struct *sbsec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 newsid, sid = current_sid();
 	int rc = 0;
 
@@ -2871,7 +2846,6 @@ static int selinux_inode_setxattr(struct dentry *dentry, const char *name,
 		return -EPERM;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
-	ad.selinux_audit_data = &sad;
 	ad.u.dentry = dentry;
 
 	rc = avc_has_perm(sid, isec->sid, isec->sclass,
@@ -3464,12 +3438,10 @@ static int selinux_kernel_module_request(char *kmod_name)
 {
 	u32 sid;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 
 	sid = task_sid(current);
 
 	ad.type = LSM_AUDIT_DATA_KMOD;
-	ad.selinux_audit_data = &sad;
 	ad.u.kmod_name = kmod_name;
 
 	return avc_has_perm(sid, SECINITSID_KERNEL, SECCLASS_SYSTEM,
@@ -3866,7 +3838,6 @@ static int sock_has_perm(struct task_struct *task, struct sock *sk, u32 perms)
 {
 	struct sk_security_struct *sksec = sk->sk_security;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	u32 tsid = task_sid(task);
 
@@ -3874,7 +3845,6 @@ static int sock_has_perm(struct task_struct *task, struct sock *sk, u32 perms)
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->sk = sk;
 
@@ -3954,7 +3924,6 @@ static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, in
 		char *addrp;
 		struct sk_security_struct *sksec = sk->sk_security;
 		struct common_audit_data ad;
-		struct selinux_audit_data sad = {0,};
 		struct lsm_network_audit net = {0,};
 		struct sockaddr_in *addr4 = NULL;
 		struct sockaddr_in6 *addr6 = NULL;
@@ -3982,7 +3951,6 @@ static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, in
 				if (err)
 					goto out;
 				ad.type = LSM_AUDIT_DATA_NET;
-				ad.selinux_audit_data = &sad;
 				ad.u.net = &net;
 				ad.u.net->sport = htons(snum);
 				ad.u.net->family = family;
@@ -4017,7 +3985,6 @@ static int selinux_socket_bind(struct socket *sock, struct sockaddr *address, in
 			goto out;
 
 		ad.type = LSM_AUDIT_DATA_NET;
-		ad.selinux_audit_data = &sad;
 		ad.u.net = &net;
 		ad.u.net->sport = htons(snum);
 		ad.u.net->family = family;
@@ -4052,7 +4019,6 @@ static int selinux_socket_connect(struct socket *sock, struct sockaddr *address,
 	if (sksec->sclass == SECCLASS_TCP_SOCKET ||
 	    sksec->sclass == SECCLASS_DCCP_SOCKET) {
 		struct common_audit_data ad;
-		struct selinux_audit_data sad = {0,};
 		struct lsm_network_audit net = {0,};
 		struct sockaddr_in *addr4 = NULL;
 		struct sockaddr_in6 *addr6 = NULL;
@@ -4079,7 +4045,6 @@ static int selinux_socket_connect(struct socket *sock, struct sockaddr *address,
 		       TCP_SOCKET__NAME_CONNECT : DCCP_SOCKET__NAME_CONNECT;
 
 		ad.type = LSM_AUDIT_DATA_NET;
-		ad.selinux_audit_data = &sad;
 		ad.u.net = &net;
 		ad.u.net->dport = htons(snum);
 		ad.u.net->family = sk->sk_family;
@@ -4171,12 +4136,10 @@ static int selinux_socket_unix_stream_connect(struct sock *sock,
 	struct sk_security_struct *sksec_other = other->sk_security;
 	struct sk_security_struct *sksec_new = newsk->sk_security;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	int err;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->sk = other;
 
@@ -4205,11 +4168,9 @@ static int selinux_socket_unix_may_send(struct socket *sock,
 	struct sk_security_struct *ssec = sock->sk->sk_security;
 	struct sk_security_struct *osec = other->sk->sk_security;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->sk = other->sk;
 
@@ -4247,12 +4208,10 @@ static int selinux_sock_rcv_skb_compat(struct sock *sk, struct sk_buff *skb,
 	struct sk_security_struct *sksec = sk->sk_security;
 	u32 sk_sid = sksec->sid;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	char *addrp;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->netif = skb->skb_iif;
 	ad.u.net->family = family;
@@ -4282,7 +4241,6 @@ static int selinux_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	u16 family = sk->sk_family;
 	u32 sk_sid = sksec->sid;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	char *addrp;
 	u8 secmark_active;
@@ -4308,7 +4266,6 @@ static int selinux_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->netif = skb->skb_iif;
 	ad.u.net->family = family;
@@ -4643,7 +4600,6 @@ static unsigned int selinux_ip_forward(struct sk_buff *skb, int ifindex,
 	char *addrp;
 	u32 peer_sid;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	u8 secmark_active;
 	u8 netlbl_active;
@@ -4662,7 +4618,6 @@ static unsigned int selinux_ip_forward(struct sk_buff *skb, int ifindex,
 		return NF_DROP;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->netif = ifindex;
 	ad.u.net->family = family;
@@ -4772,7 +4727,6 @@ static unsigned int selinux_ip_postroute_compat(struct sk_buff *skb,
 	struct sock *sk = skb->sk;
 	struct sk_security_struct *sksec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	char *addrp;
 	u8 proto;
@@ -4782,7 +4736,6 @@ static unsigned int selinux_ip_postroute_compat(struct sk_buff *skb,
 	sksec = sk->sk_security;
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->netif = ifindex;
 	ad.u.net->family = family;
@@ -4807,7 +4760,6 @@ static unsigned int selinux_ip_postroute(struct sk_buff *skb, int ifindex,
 	u32 peer_sid;
 	struct sock *sk;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	struct lsm_network_audit net = {0,};
 	char *addrp;
 	u8 secmark_active;
@@ -4903,7 +4855,6 @@ static unsigned int selinux_ip_postroute(struct sk_buff *skb, int ifindex,
 	}
 
 	ad.type = LSM_AUDIT_DATA_NET;
-	ad.selinux_audit_data = &sad;
 	ad.u.net = &net;
 	ad.u.net->netif = ifindex;
 	ad.u.net->family = family;
@@ -5021,13 +4972,11 @@ static int ipc_has_perm(struct kern_ipc_perm *ipc_perms,
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 
 	isec = ipc_perms->security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = ipc_perms->key;
 
 	return avc_has_perm(sid, isec->sid, isec->sclass, perms, &ad);
@@ -5048,7 +4997,6 @@ static int selinux_msg_queue_alloc_security(struct msg_queue *msq)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	int rc;
 
@@ -5059,7 +5007,6 @@ static int selinux_msg_queue_alloc_security(struct msg_queue *msq)
 	isec = msq->q_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = msq->q_perm.key;
 
 	rc = avc_has_perm(sid, isec->sid, SECCLASS_MSGQ,
@@ -5080,13 +5027,11 @@ static int selinux_msg_queue_associate(struct msg_queue *msq, int msqflg)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 
 	isec = msq->q_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = msq->q_perm.key;
 
 	return avc_has_perm(sid, isec->sid, SECCLASS_MSGQ,
@@ -5126,7 +5071,6 @@ static int selinux_msg_queue_msgsnd(struct msg_queue *msq, struct msg_msg *msg, 
 	struct ipc_security_struct *isec;
 	struct msg_security_struct *msec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	int rc;
 
@@ -5148,7 +5092,6 @@ static int selinux_msg_queue_msgsnd(struct msg_queue *msq, struct msg_msg *msg, 
 	}
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = msq->q_perm.key;
 
 	/* Can this process write to the queue? */
@@ -5173,7 +5116,6 @@ static int selinux_msg_queue_msgrcv(struct msg_queue *msq, struct msg_msg *msg,
 	struct ipc_security_struct *isec;
 	struct msg_security_struct *msec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = task_sid(target);
 	int rc;
 
@@ -5181,7 +5123,6 @@ static int selinux_msg_queue_msgrcv(struct msg_queue *msq, struct msg_msg *msg,
 	msec = msg->security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = msq->q_perm.key;
 
 	rc = avc_has_perm(sid, isec->sid,
@@ -5197,7 +5138,6 @@ static int selinux_shm_alloc_security(struct shmid_kernel *shp)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	int rc;
 
@@ -5208,7 +5148,6 @@ static int selinux_shm_alloc_security(struct shmid_kernel *shp)
 	isec = shp->shm_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = shp->shm_perm.key;
 
 	rc = avc_has_perm(sid, isec->sid, SECCLASS_SHM,
@@ -5229,13 +5168,11 @@ static int selinux_shm_associate(struct shmid_kernel *shp, int shmflg)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 
 	isec = shp->shm_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = shp->shm_perm.key;
 
 	return avc_has_perm(sid, isec->sid, SECCLASS_SHM,
@@ -5293,7 +5230,6 @@ static int selinux_sem_alloc_security(struct sem_array *sma)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 	int rc;
 
@@ -5304,7 +5240,6 @@ static int selinux_sem_alloc_security(struct sem_array *sma)
 	isec = sma->sem_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = sma->sem_perm.key;
 
 	rc = avc_has_perm(sid, isec->sid, SECCLASS_SEM,
@@ -5325,13 +5260,11 @@ static int selinux_sem_associate(struct sem_array *sma, int semflg)
 {
 	struct ipc_security_struct *isec;
 	struct common_audit_data ad;
-	struct selinux_audit_data sad = {0,};
 	u32 sid = current_sid();
 
 	isec = sma->sem_perm.security;
 
 	ad.type = LSM_AUDIT_DATA_IPC;
-	ad.selinux_audit_data = &sad;
 	ad.u.ipc_id = sma->sem_perm.key;
 
 	return avc_has_perm(sid, isec->sid, SECCLASS_SEM,
