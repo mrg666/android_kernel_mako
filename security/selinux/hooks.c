@@ -2162,7 +2162,6 @@ static int selinux_bprm_secureexec(struct linux_binprm *bprm)
 static inline void flush_unauthorized_files(const struct cred *cred,
 					    struct files_struct *files)
 {
-	struct common_audit_data ad;
 	struct file *file, *devnull = NULL;
 	struct tty_struct *tty;
 	struct fdtable *fdt;
@@ -2194,9 +2193,6 @@ static inline void flush_unauthorized_files(const struct cred *cred,
 		no_tty();
 
 	/* Revalidate access to inherited open files. */
-
-	ad.type = LSM_AUDIT_DATA_INODE;
-
 	spin_lock(&files->file_lock);
 	for (;;) {
 		unsigned long set, i;
