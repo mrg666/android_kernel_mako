@@ -1272,7 +1272,7 @@ void delayed_work_timer_fn(unsigned long __data)
 	struct cpu_workqueue_struct *cwq = get_work_cwq(&dwork->work);
 
 	local_irq_disable();
-	__queue_work(WORK_CPU_UNBOUND, cwq->wq, &dwork->work);
+	__queue_work(dwork->cpu, cwq->wq, &dwork->work);
 	local_irq_enable();
 }
 EXPORT_SYMBOL_GPL(delayed_work_timer_fn);
@@ -1309,6 +1309,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 
 	set_work_cwq(work, get_cwq(lcpu, wq), 0);
 
+	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
 
 	if (unlikely(cpu != WORK_CPU_UNBOUND))
@@ -2951,7 +2952,7 @@ bool flush_delayed_work(struct delayed_work *dwork)
 {
 	local_irq_disable();
 	if (del_timer_sync(&dwork->timer))
-		__queue_work(WORK_CPU_UNBOUND,
+		__queue_work(dwork->cpu,
 			     get_work_cwq(&dwork->work)->wq, &dwork->work);
 	local_irq_enable();
 	return flush_work(&dwork->work);
@@ -2974,7 +2975,7 @@ bool flush_delayed_work_sync(struct delayed_work *dwork)
 {
 	local_irq_disable();
 	if (del_timer_sync(&dwork->timer))
-		__queue_work(WORK_CPU_UNBOUND,
+		__queue_work(dwork->cpu,
 			     get_work_cwq(&dwork->work)->wq, &dwork->work);
 	local_irq_enable();
 	return flush_work_sync(&dwork->work);
