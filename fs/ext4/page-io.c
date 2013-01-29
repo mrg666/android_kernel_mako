@@ -319,14 +319,6 @@ static int io_submit_add_bh(struct ext4_io_submit *io,
 		unmap_underlying_metadata(bh->b_bdev, bh->b_blocknr);
 	}
 
-	if (!buffer_mapped(bh) || buffer_delay(bh)) {
-		if (!buffer_mapped(bh))
-			clear_buffer_dirty(bh);
-		if (io->io_bio)
-			ext4_io_submit(io);
-		return 0;
-	}
-
 	if (io->io_bio && bh->b_blocknr != io->io_next_block) {
 submit_and_retry:
 		ext4_io_submit(io);
@@ -403,6 +395,15 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
 			zero_user_segment(page, block_start, block_end);
 			clear_buffer_dirty(bh);
 			set_buffer_uptodate(bh);
+			continue;
+		}
+		if (!buffer_dirty(bh) || buffer_delay(bh) ||
+		    !buffer_mapped(bh) || buffer_unwritten(bh)) {
+			/* A hole? We can safely clear the dirty bit */
+			if (!buffer_mapped(bh))
+				clear_buffer_dirty(bh);
+			if (io->io_bio)
+				ext4_io_submit(io);
 			continue;
 		}
 		ret = io_submit_add_bh(io, io_page, inode, wbc, bh);
