@@ -19,6 +19,8 @@
  */
 #include <linux/gpio.h>
 #include <linux/syscore_ops.h>
+#include <linux/device.h>
+#include <linux/miscdevice.h>
 
 #include "msm_fb.h"
 #include "mipi_dsi.h"
@@ -221,8 +223,126 @@ struct syscore_ops panel_syscore_ops = {
 	.shutdown = mipi_lgit_lcd_shutdown,
 };
 
+/* --------------- sysfs -------------------- */
+
+static inline void update_power_data(int index, unsigned int *gamma)
+{
+	struct dsi_cmd_desc *pos;
+	int i;
+
+	pos = mipi_lgit_pdata->power_on_set_1;
+	for (i = 0; i < 9; i++) {
+		pos[index].payload[i + 1] = gamma[i];
+		pos[index + 1].payload[i + 1] = gamma[i];
+	}
+}
+
+static inline int make_buf(int index, char *buf)
+{
+	struct dsi_cmd_desc *pos;
+
+	pos = mipi_lgit_pdata->power_on_set_1;
+
+	return snprintf(buf, PAGE_SIZE, "%d %d %d %d %d %d %d %d %d\n",
+		pos[index].payload[1],
+		pos[index].payload[2],
+		pos[index].payload[3],
+		pos[index].payload[4],
+		pos[index].payload[5],
+		pos[index].payload[6],
+		pos[index].payload[7],
+		pos[index].payload[8],
+		pos[index].payload[9]);
+}
+
+static ssize_t gamma_r_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int gamma[9];
+
+	sscanf(buf, "%u %u %u %u %u %u %u %u %u",
+		&gamma[0], &gamma[1], &gamma[2], &gamma[3],
+		&gamma[4], &gamma[5], &gamma[6], &gamma[7], &gamma[8]);
+
+	update_power_data(5, gamma);
+
+	return count;
+}
+
+static ssize_t gamma_r_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return make_buf(5, buf);
+}
+
+static ssize_t gamma_g_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int gamma[9];
+
+	sscanf(buf, "%u %u %u %u %u %u %u %u %u",
+		&gamma[0], &gamma[1], &gamma[2], &gamma[3],
+		&gamma[4], &gamma[5], &gamma[6], &gamma[7], &gamma[8]);
+
+	update_power_data(7, gamma);
+
+	return count;
+}
+
+static ssize_t gamma_g_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return make_buf(7, buf);
+}
+
+static ssize_t gamma_b_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int gamma[9];
+
+	sscanf(buf, "%u %u %u %u %u %u %u %u %u",
+		&gamma[0], &gamma[1], &gamma[2], &gamma[3],
+		&gamma[4], &gamma[5], &gamma[6], &gamma[7], &gamma[8]);
+
+	update_power_data(9, gamma);
+
+	return count;
+}
+
+static ssize_t gamma_b_show(struct device *dev,
+			struct device_attribute *attr, char *buf)
+{
+	return make_buf(9, buf);
+}
+
+
+static DEVICE_ATTR(gamma_r, 0666, gamma_r_show, gamma_r_store);
+static DEVICE_ATTR(gamma_g, 0666, gamma_g_show, gamma_g_store);
+static DEVICE_ATTR(gamma_b, 0666, gamma_b_show, gamma_b_store);
+
+static struct attribute *gamma_control_attrs[] = {
+	&dev_attr_gamma_r.attr,
+	&dev_attr_gamma_g.attr,
+	&dev_attr_gamma_b.attr,
+	NULL
+};
+
+static struct attribute_group gamma_control_group = {
+	.attrs = gamma_control_attrs,
+};
+
+static struct miscdevice gamma_control_device = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "gamma_control"
+};
+
+/* --------------- sysfs end ---------------- */
+
+
 static int mipi_lgit_lcd_probe(struct platform_device *pdev)
 {
+	int ret;
+
 	if (pdev->id == 0) {
 		mipi_lgit_pdata = pdev->dev.platform_data;
 		return 0;
@@ -234,6 +354,20 @@ static int mipi_lgit_lcd_probe(struct platform_device *pdev)
 	msm_fb_add_device(pdev);
 
 	register_syscore_ops(&panel_syscore_ops);
+
+	ret = misc_register(&gamma_control_device);
+	if (ret) {
+		pr_err("%s misc register(%s)\n", __func__,
+					gamma_control_device.name);
+		return 1;
+	}
+
+	if (sysfs_create_group(&gamma_control_device.this_device->kobj,
+						&gamma_control_group) < 0) {
+		pr_err("%s sysfs_create_group fail\n", __func__);
+		pr_err("Failed to create sysfs group for device (%s)!\n",
+						gamma_control_device.name);
+	}
 
 	return 0;
 }
