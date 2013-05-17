@@ -316,18 +316,6 @@ static int increase_vdd(int cpu, struct vdd_data *data,
 		sc->vreg[VREG_DIG].cur_vdd = data->vdd_dig;
 	}
 
-	/* Increase current request. */
-	if (data->ua_core > sc->vreg[VREG_CORE].cur_ua) {
-		rc = regulator_set_optimum_mode(sc->vreg[VREG_CORE].reg,
-						data->ua_core);
-		if (rc < 0) {
-			dev_err(drv.dev, "regulator_set_optimum_mode(%s) failed (%d)\n",
-				sc->vreg[VREG_CORE].name, rc);
-			return rc;
-		}
-		sc->vreg[VREG_CORE].cur_ua = data->ua_core;
-	}
-
 	/*
 	 * Update per-CPU core voltage. Don't do this for the hotplug path for
 	 * which it should already be correct. Attempting to set it is bad
@@ -373,18 +361,6 @@ static void decrease_vdd(int cpu, struct vdd_data *data,
 			return;
 		}
 		sc->vreg[VREG_CORE].cur_vdd = data->vdd_core;
-	}
-
-	/* Decrease current request. */
-	if (data->ua_core < sc->vreg[VREG_CORE].cur_ua) {
-		ret = regulator_set_optimum_mode(sc->vreg[VREG_CORE].reg,
-						data->ua_core);
-		if (ret < 0) {
-			dev_err(drv.dev, "regulator_set_optimum_mode(%s) failed (%d)\n",
-				sc->vreg[VREG_CORE].name, ret);
-			return;
-		}
-		sc->vreg[VREG_CORE].cur_ua = data->ua_core;
 	}
 
 	/* Decrease vdd_dig active-set vote. */
@@ -538,7 +514,6 @@ static int acpuclk_krait_set_rate(int cpu, unsigned long rate,
 	vdd_data.vdd_mem  = calculate_vdd_mem(tgt);
 	vdd_data.vdd_dig  = calculate_vdd_dig(tgt);
 	vdd_data.vdd_core = calculate_vdd_core(tgt);
-	vdd_data.ua_core = tgt->ua_core;
 
 	/* Disable AVS before voltage switch */
 	if (reason == SETRATE_CPUFREQ && drv.scalable[cpu].avs_enabled) {
