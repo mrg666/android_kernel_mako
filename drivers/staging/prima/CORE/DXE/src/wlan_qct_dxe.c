@@ -607,6 +607,7 @@ void dxeRXHealthMonitor
       wpalReadRegister(testCHCtrlBlk->channelRegister.chDXEDesclRegAddr, &chDescReg);
       wpalReadRegister(testCHCtrlBlk->channelRegister.chDXELstDesclRegAddr, &chLDescReg);
 
+#ifdef DEBUG
       wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_INFO,
                 "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
                 channelType[chLoop],
@@ -615,10 +616,11 @@ void dxeRXHealthMonitor
                 testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                 testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                 testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
-
+#endif
       if((chControlReg & WLANDXE_DESC_CTRL_VALID) && 
          (chLDescReg != testCHCtrlBlk->headCtrlBlk->linkedDescPhyAddr))
       {
+#ifdef DEBUG
          wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                    "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, "
                    "HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
@@ -628,6 +630,7 @@ void dxeRXHealthMonitor
                    testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                    testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                    testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
+#endif
          HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                   "%11s : RX CH EN Descriptor Async, resync it", channelType[chLoop], 0, 0);
          wpalWriteRegister(testCHCtrlBlk->channelRegister.chDXELstDesclRegAddr,
@@ -636,6 +639,7 @@ void dxeRXHealthMonitor
       else if(!(chControlReg & WLANDXE_DESC_CTRL_VALID) && 
                (chDescReg != testCHCtrlBlk->headCtrlBlk->linkedDescPhyAddr))
       {
+#ifdef DEBUG
          wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                    "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, "
                    "HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
@@ -645,6 +649,7 @@ void dxeRXHealthMonitor
                    testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                    testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                    testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
+#endif
          HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                   "%11s : RX CH DIS Descriptor Async, resync it", channelType[chLoop], 0, 0);
          wpalWriteRegister(testCHCtrlBlk->channelRegister.chDXEDesclRegAddr,
@@ -737,7 +742,8 @@ void dxeTXHealthMonitor
       wpalReadRegister(testCHCtrlBlk->channelRegister.chDXEDesclRegAddr, &chDescReg);
       wpalReadRegister(testCHCtrlBlk->channelRegister.chDXELstDesclRegAddr, &chLDescReg);
 
-      wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_INFO,
+#ifdef DEBUG
+	   wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_INFO,
                 "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
                 channelType[chLoop],
                 chControlReg, chStatusReg, chDescReg, chLDescReg,
@@ -745,10 +751,11 @@ void dxeTXHealthMonitor
                 testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                 testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                 testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
-
+#endif
       if((chControlReg & WLANDXE_DESC_CTRL_VALID) && 
          (chLDescReg != testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr))
       {
+#ifdef DEBUG
          wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                    "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, "
                    "HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
@@ -758,6 +765,7 @@ void dxeTXHealthMonitor
                    testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                    testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                    testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
+#endif
          HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                   "%11s : TX CH EN Descriptor Async, resync it", channelType[chLoop], 0, 0);
          wpalWriteRegister(testCHCtrlBlk->channelRegister.chDXELstDesclRegAddr,
@@ -766,6 +774,7 @@ void dxeTXHealthMonitor
       else if(!(chControlReg & WLANDXE_DESC_CTRL_VALID) && 
                (chDescReg != testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr))
       {
+#ifdef DEBUG
          wpalTrace(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                    "%11s : CCR 0x%x, CSR 0x%x, CDR 0x%x, CLDR 0x%x, "
                    "HCBO %d, HCBDP 0x%x, HCBDC 0x%x, TCBO %d,TCBDP 0x%x, TCBDC 0x%x",
@@ -775,6 +784,7 @@ void dxeTXHealthMonitor
                    testCHCtrlBlk->headCtrlBlk->linkedDesc->descCtrl.ctrl,
                    testCHCtrlBlk->tailCtrlBlk->ctrlBlkOrder, testCHCtrlBlk->tailCtrlBlk->linkedDescPhyAddr,
                    testCHCtrlBlk->tailCtrlBlk->linkedDesc->descCtrl.ctrl);
+#endif
          HDXE_MSG(eWLAN_MODULE_DAL_DATA, eWLAN_PAL_TRACE_LEVEL_WARN,
                   "%11s : TX CH DIS Descriptor Async, resync it", channelType[chLoop], 0, 0);
          wpalWriteRegister(testCHCtrlBlk->channelRegister.chDXEDesclRegAddr,

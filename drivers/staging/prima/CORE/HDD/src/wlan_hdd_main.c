@@ -361,7 +361,7 @@ static void hdd_vos_trace_enable(VOS_MODULE_ID moduleId, v_U32_t bitmask)
    }
 }
 
-
+#ifdef DEBUG
 /**---------------------------------------------------------------------------
 
   \brief hdd_wdi_trace_enable() - Configure initial WDI Trace enable
@@ -402,6 +402,7 @@ static void hdd_wdi_trace_enable(wpt_moduleid moduleId, v_U32_t bitmask)
       bitmask >>= 1;
    }
 }
+#endif
 
 int hdd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
@@ -4489,7 +4490,7 @@ int hdd_wlan_startup(struct device *dev )
                         pHddCtx->cfg_ini->vosTraceEnableSAP);
    hdd_vos_trace_enable(VOS_MODULE_ID_HDD_SOFTAP,
                         pHddCtx->cfg_ini->vosTraceEnableHDDSAP);
-
+#ifdef DEBUG
    // Update WDI trace levels based upon the cfg.ini
    hdd_wdi_trace_enable(eWLAN_MODULE_DAL,
                         pHddCtx->cfg_ini->wdiTraceEnableDAL);
@@ -4499,7 +4500,7 @@ int hdd_wlan_startup(struct device *dev )
                         pHddCtx->cfg_ini->wdiTraceEnableDAT);
    hdd_wdi_trace_enable(eWLAN_MODULE_PAL,
                         pHddCtx->cfg_ini->wdiTraceEnablePAL);
-
+#endif
    if (VOS_FTM_MODE == hdd_get_conparam())
    {
       if ( VOS_STATUS_SUCCESS != wlan_hdd_ftm_open(pHddCtx) )

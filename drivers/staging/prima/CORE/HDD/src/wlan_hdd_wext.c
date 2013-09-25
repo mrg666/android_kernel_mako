@@ -3981,14 +3981,14 @@ static int iw_setnone_getint(struct net_device *dev, struct iw_request_info *inf
             }
             break;
         }
-
+#ifdef DEBUG
         case WE_GET_WDI_DBG:
         {
            wpalTraceDisplay();
            *value = 0;
            break;
         }
-
+#endif
         case WE_GET_SAP_AUTO_CHANNEL_SELECTION:
         {
             *value = (WLAN_HDD_GET_CTX(pAdapter))->cfg_ini->apAutoChannelSelection;
@@ -4035,11 +4035,13 @@ int iw_set_three_ints_getnone(struct net_device *dev, struct iw_request_info *in
             vos_trace_setValue( value[1], value[2], value[3]);
             break;
         }
+#ifdef DEBUG
         case WE_SET_WDI_DBG:
         {
             wpalTraceSetLevel( value[1], value[2], value[3]);
             break;
         }
+#endif
         case WE_SET_SAP_CHANNELS:
         {
             ret = iw_softap_set_channel_range( dev, value[1], value[2], value[3]);
