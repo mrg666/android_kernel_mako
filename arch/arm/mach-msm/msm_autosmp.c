@@ -128,8 +128,8 @@ static bool asmp_cpu_down(int cpu) {
 		mutex_lock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 		cpu_down(cpu);
 		per_cpu(msm_asmp_cpudata, cpu).online = false;
-		pr_info(ASMP_TAG"CPU[%d] on->off | Mask=[%d%d]\n",
-			cpu, cpu_online(0), cpu_online(1));
+		/* pr_info(ASMP_TAG"CPU[%d] on->off | Mask=[%d%d]\n",
+			cpu, cpu_online(0), cpu_online(1)); */
 		mutex_unlock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 	}
 	return ret;
@@ -144,8 +144,8 @@ static bool __cpuinit asmp_cpu_up(int cpu) {
 		cpu_up(cpu);
 		per_cpu(msm_asmp_cpudata, cpu).online = true;		
 		per_cpu(msm_asmp_cpudata, cpu).times_cpu_hotplugged += 1;
-		pr_info(ASMP_TAG"CPU[%d] off->on | Mask=[%d%d]\n",
-			cpu, cpu_online(0), cpu_online(1));
+		/* pr_info(ASMP_TAG"CPU[%d] off->on | Mask=[%d%d]\n",
+			cpu, cpu_online(0), cpu_online(1)); */
 		mutex_unlock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 	}
 	return ret;
