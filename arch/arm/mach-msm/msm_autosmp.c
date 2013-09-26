@@ -75,7 +75,7 @@ static struct msm_asmp_tuners {
 /* limit arrays: 1_up, 2_down, 2_up, 3_down, 3_up, 4_down, ...
  * if i=nr_cpu_online, up_index=2*i-2 and down_index=2*i-3, 
  * i>1 for down and i<CONFIG_NR_CPUS for up */ 
-static unsigned int load_limit[6] = {10, 5, 20, 10, 30, 15};
+static unsigned int load_limit[6] = {10, 5, 20, 15, 30, 25};
 static unsigned int time_limit[6] = {90, 450, 90, 450, 90, 450};
 
 bool was_paused = false;
