@@ -401,6 +401,14 @@ config  MSM_SMP
 	select HAVE_SMP
 	bool
 
+config MSM_ASMP
+	bool "Enable kernel based auto smp"
+	depends on MSM_SMP
+	default n
+	help
+	  Automatically hotplugs the multiple cores of MSM cpus on/off
+	  based on demand and suspend
+
 config  ARCH_MSM_SCORPIONMP
 	select ARCH_MSM_SCORPION
 	select MSM_SMP
