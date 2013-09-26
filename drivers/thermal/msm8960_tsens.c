@@ -165,6 +165,8 @@ struct tsens_tm_device {
 
 struct tsens_tm_device *tmdev;
 
+static unsigned int tsens_log_count = 0;
+
 /* Temperature on y axis and ADC-code on x-axis */
 static int tsens_tz_code_to_degC(int adc_code, int sensor_num)
 {
@@ -217,6 +219,11 @@ static void tsens8960_get_temp(int sensor_num, unsigned long *temp)
 	code = readl_relaxed(sensor_addr + offset +
 			(sensor_num << TSENS_STATUS_ADDR_OFFSET));
 	*temp = tsens_tz_code_to_degC(code, sensor_num);
+	tsens_log_count++;
+	if (tsens_log_count > 240) {
+		pr_warn("TSENS: Current CPU Temperature is: %lu\n", *temp);
+		tsens_log_count = 0;
+	}
 }
 
 static int tsens_tz_get_temp(struct thermal_zone_device *thermal,

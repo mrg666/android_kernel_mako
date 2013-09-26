@@ -190,6 +190,7 @@ int __devinit msm_thermal_init(struct msm_thermal_data *pdata)
 	INIT_DELAYED_WORK(&check_temp_work, check_temp);
 	schedule_delayed_work(&check_temp_work, 0);
 
+	pr_info("msm_thermal: initialized\n");
 	return ret;
 }
 
