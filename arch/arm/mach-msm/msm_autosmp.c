@@ -82,7 +82,7 @@ static struct msm_asmp_tuners {
 
 bool was_paused = false;
 static cputime64_t asmp_paused_until = 0;
-static cputime64_t total_time = 0;
+static cputime64_t delta_time = 0;
 static cputime64_t last_time;
 static int enabled = 1;
 
@@ -171,10 +171,10 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 	cputime64_t current_time;
 
 	current_time = ktime_to_ms(ktime_get());
-	total_time += (current_time - last_time);
+	delta_time += (current_time - last_time);
 
 	if (was_paused) {
-		if (asmp_paused_until >= current_time) {
+		if (current_time < asmp_paused_until) {
 			goto out;
 		} else {
 			for_each_possible_cpu(cpu) {
@@ -194,26 +194,26 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 
 	if ((nr_cpu_online < msm_asmp_tuners_ins.max_cpus) && 
 	    (rq_avg >= msm_asmp_tuners_ins.load_limit_up)) {
-		if (total_time >= msm_asmp_tuners_ins.time_limit_up) {
+		if (delta_time >= msm_asmp_tuners_ins.time_limit_up) {
 #if CONFIG_NR_CPUS > 2
 			cpu = cpumask_next_zero(0, cpu_online_mask);
 #endif
 			if (per_cpu(msm_asmp_cpudata, cpu).online == false) {
 				if (asmp_cpu_up(cpu))
-					total_time = 0;
+					delta_time = 0;
 				else
 					asmp_pause(cpu);
 			}
 		}
 	} else if ((nr_cpu_online > msm_asmp_tuners_ins.min_cpus) &&
 		   (rq_avg <= msm_asmp_tuners_ins.load_limit_down)) {
-		if (total_time >= msm_asmp_tuners_ins.time_limit_down) {
+		if (delta_time >= msm_asmp_tuners_ins.time_limit_down) {
 #if CONFIG_NR_CPUS > 2
 			cpu = get_slowest_cpu();
 #endif
 			if (per_cpu(msm_asmp_cpudata, cpu).online == true) {
 				if (asmp_cpu_down(cpu))
-					total_time = 0;
+					delta_time = 0;
 				else
 					asmp_pause(cpu);
 			}
