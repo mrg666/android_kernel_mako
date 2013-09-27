@@ -64,19 +64,21 @@ static struct msm_asmp_tuners {
 	bool scroff_single_core;
 	unsigned int max_cpus;
 	unsigned int min_cpus;
+	unsigned int load_limit_up;
+	unsigned int load_limit_down;
+	unsigned int time_limit_up;
+	unsigned int time_limit_down;
 } msm_asmp_tuners_ins = {
 	.delay = MSM_ASMP_DELAY,
 	.pause = MSM_ASMP_PAUSE,
 	.scroff_single_core = true,
 	.max_cpus = CONFIG_NR_CPUS,
 	.min_cpus = 1,
+	.load_limit_up = 35,
+	.load_limit_down = 5,
+	.time_limit_up = 90,
+	.time_limit_down = 450,
 };
-
-/* limit arrays: 1_up, 2_down, 2_up, 3_down, 3_up, 4_down, ...
- * if i=nr_cpu_online, up_index=2*i-2 and down_index=2*i-3, 
- * i>1 for down and i<CONFIG_NR_CPUS for up */ 
-static unsigned int load_limit[6] = {35, 5, 35, 5, 35, 5};
-static unsigned int time_limit[6] = {90, 450, 90, 450, 90, 450};
 
 bool was_paused = false;
 static cputime64_t asmp_paused_until = 0;
@@ -165,7 +167,6 @@ static void rq_work_fn(struct work_struct *work) {
 static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 	unsigned int cpu;
 	int nr_cpu_online;
-	int index;
 	unsigned int rq_avg;
 	cputime64_t current_time;
 
@@ -190,11 +191,10 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 	cpu = 1;
 	rq_avg = get_rq_avg();
 	nr_cpu_online = num_online_cpus();
-	index = 2*nr_cpu_online - 2;
 
 	if ((nr_cpu_online < msm_asmp_tuners_ins.max_cpus) && 
-	    (rq_avg >= load_limit[index])) {
-		if (total_time >= time_limit[index]) {
+	    (rq_avg >= msm_asmp_tuners_ins.load_limit_up)) {
+		if (total_time >= msm_asmp_tuners_ins.time_limit_up) {
 #if CONFIG_NR_CPUS > 2
 			cpu = cpumask_next_zero(0, cpu_online_mask);
 #endif
@@ -206,8 +206,8 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 			}
 		}
 	} else if ((nr_cpu_online > msm_asmp_tuners_ins.min_cpus) &&
-		   (rq_avg <= load_limit[index-1])) {
-		if (total_time >= time_limit[index-1]) {
+		   (rq_avg <= msm_asmp_tuners_ins.load_limit_down)) {
+		if (total_time >= msm_asmp_tuners_ins.time_limit_down) {
 #if CONFIG_NR_CPUS > 2
 			cpu = get_slowest_cpu();
 #endif
@@ -314,6 +314,10 @@ show_one(pause, pause);
 show_one(scroff_single_core, scroff_single_core);
 show_one(min_cpus, min_cpus);
 show_one(max_cpus, max_cpus);
+show_one(load_limit_up, load_limit_up);
+show_one(load_limit_down, load_limit_down);
+show_one(time_limit_up, time_limit_up);
+show_one(time_limit_down, time_limit_down);
 
 #define store_one(file_name, object)					\
 static ssize_t store_##file_name					\
@@ -333,72 +337,11 @@ store_one(pause, pause);
 store_one(scroff_single_core, scroff_single_core);
 store_one(max_cpus, max_cpus);
 store_one(min_cpus, min_cpus);
+store_one(load_limit_up, load_limit_up);
+store_one(load_limit_down, load_limit_down);
+store_one(time_limit_up, time_limit_up);
+store_one(time_limit_down, time_limit_down);
 
-#define show_one_tlim(file_name, arraypos)				\
-static ssize_t show_##file_name						\
-(struct kobject *kobj, struct attribute *attr, char *buf)		\
-{									\
-	return sprintf(buf, "%u\n", time_limit[arraypos]);		\
-}
-show_one_tlim(time_limit_0, 0);
-show_one_tlim(time_limit_1, 1);
-show_one_tlim(time_limit_2, 2);
-show_one_tlim(time_limit_3, 3);
-show_one_tlim(time_limit_4, 4);
-show_one_tlim(time_limit_5, 5);
-
-#define store_one_tlim(file_name, arraypos)				\
-static ssize_t store_##file_name					\
-(struct kobject *a, struct attribute *b, const char *buf, size_t count)	\
-{									\
-	unsigned int input;						\
-	int ret;							\
-	ret = sscanf(buf, "%u", &input);				\
-	if (ret != 1)							\
-		return -EINVAL;						\
-	time_limit[arraypos] = input;					\
-	return count;							\
-}									\
-define_one_global_rw(file_name);
-store_one_tlim(time_limit_0, 0);
-store_one_tlim(time_limit_1, 1);
-store_one_tlim(time_limit_2, 2);
-store_one_tlim(time_limit_3, 3);
-store_one_tlim(time_limit_4, 4);
-store_one_tlim(time_limit_5, 5);
-
-#define show_one_llim(file_name, arraypos)				\
-static ssize_t show_##file_name						\
-(struct kobject *kobj, struct attribute *attr, char *buf)		\
-{									\
-	return sprintf(buf, "%u\n", load_limit[arraypos]);		\
-}
-show_one_llim(load_limit_0, 0);
-show_one_llim(load_limit_1, 1);
-show_one_llim(load_limit_2, 2);
-show_one_llim(load_limit_3, 3);
-show_one_llim(load_limit_4, 4);
-show_one_llim(load_limit_5, 5);
-
-#define store_one_llim(file_name, arraypos)				\
-static ssize_t store_##file_name					\
-(struct kobject *a, struct attribute *b, const char *buf, size_t count)	\
-{									\
-	unsigned int input;						\
-	int ret;							\
-	ret = sscanf(buf, "%u", &input);				\
-	if (ret != 1)							\
-		return -EINVAL;						\
-	load_limit[arraypos] = input;					\
-	return count;							\
-}									\
-define_one_global_rw(file_name);
-store_one_llim(load_limit_0, 0);
-store_one_llim(load_limit_1, 1);
-store_one_llim(load_limit_2, 2);
-store_one_llim(load_limit_3, 3);
-store_one_llim(load_limit_4, 4);
-store_one_llim(load_limit_5, 5);
 
 static struct attribute *msm_asmp_attributes[] = {
 	&delay.attr,
@@ -406,18 +349,10 @@ static struct attribute *msm_asmp_attributes[] = {
 	&scroff_single_core.attr,
 	&min_cpus.attr,
 	&max_cpus.attr,
-	&time_limit_0.attr,
-	&time_limit_1.attr,
-	&time_limit_2.attr,
-	&time_limit_3.attr,
-	&time_limit_4.attr,
-	&time_limit_5.attr,
-	&load_limit_0.attr,
-	&load_limit_1.attr,
-	&load_limit_2.attr,
-	&load_limit_3.attr,
-	&load_limit_4.attr,
-	&load_limit_5.attr,
+	&load_limit_up.attr,
+	&load_limit_down.attr,
+	&time_limit_up.attr,
+	&time_limit_down.attr,
 	NULL
 };
 
