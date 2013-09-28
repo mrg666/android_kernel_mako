@@ -6,8 +6,10 @@
  * based on the msm_mpdecision code by
  * Copyright (c) 2012-2013, Dennis Rassmann <showp1984@gmail.com>
  *
- * major revision:
+ * major revision: msm_mpdecsion.c
  * July 2013, https://github.com/mrg666/android_kernel_shooter
+ * revision: msm_autosmp.c
+ * September 2013, https://github.com/mrg666/android_kernel_mako
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +33,9 @@
 #include "acpuclock.h"
 #include <linux/rq_stats.h>
 
+#define DEBUG 0
+#define STATS 0
+
 #define DEFAULT_RQ_POLL_JIFFIES		1
 #define DEFAULT_DEF_TIMER_JIFFIES	5
 
@@ -50,7 +55,9 @@ __ATTR(_name, 0644, show_##_name, store_##_name)
 struct msm_asmp_cpudata_t {
 	struct mutex hotplug_mutex;
 	int online;
-	long long unsigned int times_cpu_hotplugged;
+#if STATS
+	long long unsigned int times_hotplugged;
+#endif
 };
 static DEFINE_PER_CPU(struct msm_asmp_cpudata_t, msm_asmp_cpudata);
 
@@ -106,19 +113,20 @@ static void asmp_pause(int cpu) {
 
 #if CONFIG_NR_CPUS > 2
 static int get_slowest_cpu(void) {
-	int i, cpu = 1;
-	unsigned long rate, slow_rate = 999999999;
+	int cpu, slow_cpu = 1;
+	unsigned long rate, slow_rate = ULONG_MAX;
 
-	for (i = 1; i < nr_cpu_ids; i++) {
-		if (cpu_online(i)) {
-			rate = acpuclk_get_rate(i);
+	get_online_cpus(); 
+	for_each_online_cpu(cpu)
+		if (cpu > 0) {
+			rate = acpuclk_get_rate(cpu);
 			if (rate < slow_rate) {
-				cpu = i;
+				slow_cpu = cpu;
 				slow_rate = rate;
 			}
 		}
-	}
-	return cpu;
+	put_online_cpus(); 
+	return slow_cpu;
 }
 #endif
 
@@ -130,8 +138,12 @@ static bool asmp_cpu_down(int cpu) {
 		mutex_lock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 		cpu_down(cpu);
 		per_cpu(msm_asmp_cpudata, cpu).online = false;
-		/* pr_info(ASMP_TAG"CPU[%d] on->off | Mask=[%d%d]\n",
-			cpu, cpu_online(0), cpu_online(1)); */
+#if STATS
+		per_cpu(msm_asmp_cpudata, cpu).times_hotplugged += 1;
+#endif
+#if DEBUG
+		pr_info(ASMP_TAG"CPU[%d] off\n");
+#endif
 		mutex_unlock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 	}
 	return ret;
@@ -144,10 +156,10 @@ static bool __cpuinit asmp_cpu_up(int cpu) {
 	if (ret) {
 		mutex_lock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 		cpu_up(cpu);
-		per_cpu(msm_asmp_cpudata, cpu).online = true;		
-		per_cpu(msm_asmp_cpudata, cpu).times_cpu_hotplugged += 1;
-		/* pr_info(ASMP_TAG"CPU[%d] off->on | Mask=[%d%d]\n",
-			cpu, cpu_online(0), cpu_online(1)); */
+		per_cpu(msm_asmp_cpudata, cpu).online = true;
+#if DEBUG
+		pr_info(ASMP_TAG"CPU[%d] on\n");
+#endif
 		mutex_unlock(&per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex);
 	}
 	return ret;
@@ -171,7 +183,8 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 	cputime64_t current_time;
 
 	current_time = ktime_to_ms(ktime_get());
-	delta_time += (current_time - last_time);
+	delta_time += current_time - last_time;
+	last_time = current_time;
 
 	if (was_paused) {
 		if (current_time < asmp_paused_until) {
@@ -220,11 +233,9 @@ static void __cpuinit msm_asmp_work_thread(struct work_struct *work) {
 		}
 	}
 out:
-	last_time = current_time;
 	if (enabled)
 		queue_delayed_work(msm_asmp_workq, &msm_asmp_work,
 				   msecs_to_jiffies(msm_asmp_tuners_ins.delay));
-	return;
 }
 
 static void msm_asmp_early_suspend(struct early_suspend *h) {
@@ -261,8 +272,7 @@ static void __cpuinit msm_asmp_late_resume(struct early_suspend *h) {
 				msecs_to_jiffies(msm_asmp_tuners_ins.delay));
 	}
 
-	pr_info(ASMP_TAG"msm_autosmp resumed. | Mask=[%d%d]\n",
-		cpu_online(0), cpu_online(1));
+	pr_info(ASMP_TAG"msm_autosmp resumed.\n");
 }
 
 static struct early_suspend __refdata msm_asmp_early_suspend_handler = {
@@ -360,22 +370,22 @@ static struct attribute_group msm_asmp_attr_group = {
 	.attrs = msm_asmp_attributes,
 	.name = "conf",
 };
-
-static ssize_t show_times_cpus_hotplugged(struct kobject *a, 
+#if STATS
+static ssize_t show_times_hotplugged(struct kobject *a, 
 					struct attribute *b, char *buf) {
 	ssize_t len = 0;
 	int cpu = 0;
 
 	for_each_possible_cpu(cpu) {
 		len += sprintf(buf + len, "%i %llu\n", cpu, 
-			per_cpu(msm_asmp_cpudata, cpu).times_cpu_hotplugged);
+			per_cpu(msm_asmp_cpudata, cpu).times_hotplugged);
 	}
 	return len;
 }
-define_one_global_ro(times_cpus_hotplugged);
+define_one_global_ro(times_hotplugged);
 
 static struct attribute *msm_asmp_stats_attributes[] = {
-	&times_cpus_hotplugged.attr,
+	&times_hotplugged.attr,
 	NULL
 };
 
@@ -383,6 +393,7 @@ static struct attribute_group msm_asmp_stats_attr_group = {
 	.attrs = msm_asmp_stats_attributes,
 	.name = "stats",
 };
+#endif
 /****************************** SYSFS END ******************************/
 
 static int __init msm_asmp_init(void) {
@@ -405,7 +416,9 @@ static int __init msm_asmp_init(void) {
 	for_each_possible_cpu(cpu) {
 		mutex_init(&(per_cpu(msm_asmp_cpudata, cpu).hotplug_mutex));
 		per_cpu(msm_asmp_cpudata, cpu).online = true;
-		per_cpu(msm_asmp_cpudata, cpu).times_cpu_hotplugged = 0;
+#if STATS
+		per_cpu(msm_asmp_cpudata, cpu).times_hotplugged = 0;
+#endif
 	}
 
 	msm_asmp_workq = alloc_workqueue("asmp",
@@ -425,10 +438,12 @@ static int __init msm_asmp_init(void) {
 					&msm_asmp_attr_group);
 		if (rc)
 			pr_warn(ASMP_TAG"sysfs: ERROR, could not create sysfs group");
+#if STATS
 		rc = sysfs_create_group(msm_asmp_kobject,
 					&msm_asmp_stats_attr_group);
 		if (rc)
 			pr_warn(ASMP_TAG"sysfs: ERROR, could not create sysfs stats group");
+#endif
 	} else
 		pr_warn(ASMP_TAG"sysfs: ERROR, could not create sysfs kobj");
 
