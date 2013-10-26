@@ -873,6 +873,12 @@ config MACH_APQ8064_LIQUID
 	help
 	  Support for the Qualcomm APQ8064 LIQUID device.
 
+config MACH_APQ8064_OC
+	depends on ARCH_APQ8064
+	bool "APQ8064 OC"
+	help
+	  Overclock Qualcomm APQ8064.
+
 config MACH_MPQ8064_CDP
 	depends on ARCH_APQ8064
 	bool "MPQ8064 CDP"
