@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -17,6 +17,7 @@
 /* MAX Data xfer block size between BAM and CE */
 #define MAX_CE_BAM_BURST_SIZE   0x40
 #define QCEBAM_BURST_SIZE	MAX_CE_BAM_BURST_SIZE
+#define MAX_BAM_DESCRIPTORS	(0x40 - 1)
 
 #define GET_VIRT_ADDR(x)  \
 		((uint32_t)pce_dev->coh_vmem +			\
@@ -35,7 +36,7 @@
 
 /* QCE max number of descriptor in a descriptor list */
 #define QCE_MAX_NUM_DESC    128
-#define SPS_MAX_PKT_SIZE  (32 * 1024  - 64)
+#define SPS_MAX_PKT_SIZE  (64 * 1024  - 1)
 
 /* State of consumer/producer Pipe */
 enum qce_pipe_st_enum {
@@ -103,59 +104,12 @@ struct qce_cmdlistptr_ops {
 	struct qce_cmdlist_info auth_sha256_hmac;
 	struct qce_cmdlist_info auth_aes_128_cmac;
 	struct qce_cmdlist_info auth_aes_256_cmac;
-	struct qce_cmdlist_info aead_hmac_sha1_cbc_aes_128;
-	struct qce_cmdlist_info aead_hmac_sha1_cbc_aes_256;
-	struct qce_cmdlist_info aead_hmac_sha1_cbc_des;
-	struct qce_cmdlist_info aead_hmac_sha1_cbc_3des;
-	struct qce_cmdlist_info aead_hmac_sha1_ecb_aes_128;
-	struct qce_cmdlist_info aead_hmac_sha1_ecb_aes_256;
-	struct qce_cmdlist_info aead_hmac_sha1_ecb_des;
-	struct qce_cmdlist_info aead_hmac_sha1_ecb_3des;
+	struct qce_cmdlist_info aead_sha1_hmac;
 	struct qce_cmdlist_info aead_aes_128_ccm;
 	struct qce_cmdlist_info aead_aes_256_ccm;
 	struct qce_cmdlist_info unlock_all_pipes;
 };
 
-struct qce_ce_cfg_reg_setting {
-	uint32_t crypto_cfg_be;
-	uint32_t crypto_cfg_le;
-
-	uint32_t encr_cfg_aes_cbc_128;
-	uint32_t encr_cfg_aes_cbc_256;
-
-	uint32_t encr_cfg_aes_ecb_128;
-	uint32_t encr_cfg_aes_ecb_256;
-
-	uint32_t encr_cfg_aes_xts_128;
-	uint32_t encr_cfg_aes_xts_256;
-
-	uint32_t encr_cfg_aes_ctr_128;
-	uint32_t encr_cfg_aes_ctr_256;
-
-	uint32_t encr_cfg_aes_ccm_128;
-	uint32_t encr_cfg_aes_ccm_256;
-
-	uint32_t encr_cfg_des_cbc;
-	uint32_t encr_cfg_des_ecb;
-
-	uint32_t encr_cfg_3des_cbc;
-	uint32_t encr_cfg_3des_ecb;
-
-	uint32_t auth_cfg_cmac_128;
-	uint32_t auth_cfg_cmac_256;
-
-	uint32_t auth_cfg_sha1;
-	uint32_t auth_cfg_sha256;
-
-	uint32_t auth_cfg_hmac_sha1;
-	uint32_t auth_cfg_hmac_sha256;
-
-	uint32_t auth_cfg_aes_ccm_128;
-	uint32_t auth_cfg_aes_ccm_256;
-	uint32_t auth_cfg_aead_sha1_hmac;
-	uint32_t auth_cfg_aead_sha256_hmac;
-
-};
 
 /* DM data structure with buffers, commandlists & commmand pointer lists */
 struct ce_sps_data {
