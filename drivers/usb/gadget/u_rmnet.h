@@ -47,6 +47,7 @@ struct grmnet {
 };
 
 int gbam_setup(unsigned int no_bam_port, unsigned int no_bam2bam_port);
+void gbam_cleanup(void);
 int gbam_connect(struct grmnet *gr, u8 port_num,
 				 enum transport_type trans, u8 connection_idx);
 void gbam_disconnect(struct grmnet *gr, u8 port_num, enum transport_type trans);

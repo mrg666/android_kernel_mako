@@ -1171,6 +1171,7 @@ fail_probe:
 	for (i = 0; i < nr_rmnet_ports; i++)
 		kfree(rmnet_ports[i].port);
 
+	gbam_cleanup();
 	nr_rmnet_ports = 0;
 	no_ctrl_smd_ports = 0;
 	no_data_bam_ports = 0;
