@@ -7,12 +7,12 @@
  * based on the msm_mpdecision code by
  * Copyright (c) 2012-2013, Dennis Rassmann <showp1984@gmail.com>
  *
- * major revision: msm_mpdecsion.c
- * July 2013, https://github.com/mrg666/android_kernel_shooter
- * revision: generalize for any number of cores rename as msm_autosmp.c
- * September 2013, https://github.com/mrg666/android_kernel_mako
- * revision: generalize for other arch than msm, rename as autosmp.c
- * October 2013, https://github.com/mrg666/android_kernel_mako
+ * major revision: rewrite to simplify and optimize
+ * July 2013, http://goo.gl/cdGw6x
+ * revision: further optimizations, generalize for any number of cores
+ * September 2013, http://goo.gl/448qBz
+ * revision: generalize for other arm arch, rename as autosmp.c
+ * December 2013, http://goo.gl/x5oyhy
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,14 +46,6 @@
 #define ASMP_DELAY			100
 #define ASMP_PAUSE			10000
 
-#define define_one_global_ro(_name)		\
-static struct global_attr _name =		\
-__ATTR(_name, 0444, show_##_name, NULL)
-
-#define define_one_global_rw(_name)		\
-static struct global_attr _name =		\
-__ATTR(_name, 0644, show_##_name, store_##_name)
-
 struct asmp_cpudata_t {
 	struct mutex hotplug_mutex;
 	int online;
@@ -61,11 +53,11 @@ struct asmp_cpudata_t {
 	long long unsigned int times_hotplugged;
 #endif
 };
-static DEFINE_PER_CPU(struct asmp_cpudata_t, asmp_cpudata);
 
 static struct delayed_work asmp_work;
 static struct workqueue_struct *asmp_workq;
 static DEFINE_MUTEX(asmp_cpu_lock);
+static DEFINE_PER_CPU(struct asmp_cpudata_t, asmp_cpudata);
 
 static struct asmp_tuners {
 	unsigned int delay;
@@ -83,7 +75,7 @@ static struct asmp_tuners {
 	.scroff_single_core = true,
 	.max_cpus = CONFIG_NR_CPUS,
 	.min_cpus = 1,
-	.load_limit_up = 35,
+	.load_limit_up = 25,
 	.load_limit_down = 5,
 	.time_limit_up = 90,
 	.time_limit_down = 450,
@@ -275,7 +267,6 @@ static void __cpuinit asmp_late_resume(struct early_suspend *h) {
 		queue_delayed_work(asmp_workq, &asmp_work, 
 				msecs_to_jiffies(asmp_tuners_ins.delay));
 	}
-
 	pr_info(ASMP_TAG"autosmp resumed.\n");
 }
 
@@ -315,13 +306,21 @@ module_param_cb(enabled, &module_ops, &enabled, 0644);
 MODULE_PARM_DESC(enabled, "hotplug cpu cores based on demand");
 
 /***************************** SYSFS START *****************************/
+#define define_one_global_ro(_name)					\
+static struct global_attr _name =					\
+__ATTR(_name, 0444, show_##_name, NULL)
+
+#define define_one_global_rw(_name)					\
+static struct global_attr _name =					\
+__ATTR(_name, 0644, show_##_name, store_##_name)
+
 struct kobject *asmp_kobject;
 
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
 {									\
-	return sprintf(buf, "%u\n", asmp_tuners_ins.object);	\
+	return sprintf(buf, "%u\n", asmp_tuners_ins.object);		\
 }
 show_one(delay, delay);
 show_one(pause, pause);
@@ -342,7 +341,7 @@ static ssize_t store_##file_name					\
 	ret = sscanf(buf, "%u", &input);				\
 	if (ret != 1)							\
 		return -EINVAL;						\
-	asmp_tuners_ins.object = input;				\
+	asmp_tuners_ins.object = input;					\
 	return count;							\
 }									\
 define_one_global_rw(file_name);
@@ -355,7 +354,6 @@ store_one(load_limit_up, load_limit_up);
 store_one(load_limit_down, load_limit_down);
 store_one(time_limit_up, time_limit_up);
 store_one(time_limit_down, time_limit_down);
-
 
 static struct attribute *asmp_attributes[] = {
 	&delay.attr,
@@ -425,8 +423,8 @@ static int __init asmp_init(void) {
 #endif
 	}
 
-	asmp_workq = alloc_workqueue("asmp",
-					WQ_UNBOUND | WQ_RESCUER | WQ_FREEZABLE, 1);
+	asmp_workq = alloc_workqueue("asmp", WQ_UNBOUND | WQ_RESCUER | WQ_FREEZABLE
+				     | WQ_HIGHPRI, 1);
 	if (!asmp_workq)
 		return -ENOMEM;
 	INIT_DELAYED_WORK(&asmp_work, asmp_work_thread);
