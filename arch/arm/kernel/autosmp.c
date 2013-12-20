@@ -145,7 +145,7 @@ static bool asmp_cpu_down(int cpu) {
 	return ret;
 }
 
-static bool __cpuinit asmp_cpu_up(int cpu) {
+static bool asmp_cpu_up(int cpu) {
 	bool ret;
 	
 	ret = !cpu_online(cpu);
@@ -172,7 +172,7 @@ static void rq_work_fn(struct work_struct *work) {
 	rq_info.def_start_time = now;
 }
 
-static void __cpuinit asmp_work_thread(struct work_struct *work) {
+static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	unsigned int cpu;
 	int nr_cpu_online;
 	unsigned int rq_avg;
@@ -427,7 +427,7 @@ static int __init asmp_init(void) {
 				     | WQ_HIGHPRI, 1);
 	if (!asmp_workq)
 		return -ENOMEM;
-	INIT_DELAYED_WORK(&asmp_work, asmp_work_thread);
+	INIT_DELAYED_WORK(&asmp_work, asmp_work_fn);
 	if (enabled)
 		queue_delayed_work(asmp_workq, &asmp_work,
 				   msecs_to_jiffies(ASMP_STARTDELAY));
