@@ -249,7 +249,7 @@ struct kobject *asmp_kobject;
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
 {									\
-	return sprintf(buf, "%u\n", asmp_param.object);		\
+	return sprintf(buf, "%u\n", asmp_param.object);			\
 }
 show_one(delay, delay);
 show_one(scroff_single_core, scroff_single_core);
@@ -343,8 +343,7 @@ static int __init asmp_init(void) {
 	for_each_possible_cpu(cpu)
 		per_cpu(asmp_cpudata, cpu).times_hotplugged = 0;
 
-	asmp_workq = alloc_workqueue("asmp", WQ_UNBOUND | WQ_RESCUER | WQ_FREEZABLE
-				     | WQ_HIGHPRI, 1);
+	asmp_workq = alloc_workqueue("asmp", WQ_HIGHPRI, 0);
 	if (!asmp_workq)
 		return -ENOMEM;
 	INIT_DELAYED_WORK(&asmp_work, asmp_work_fn);
