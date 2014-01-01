@@ -80,7 +80,6 @@ static int mipi_lgit_lcd_on(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	lcd_isactive = 1;
 	MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);
 	ret = mipi_dsi_cmds_tx(&lgit_tx_buf,
 			mipi_lgit_pdata->power_on_set_1,
@@ -120,6 +119,8 @@ static int mipi_lgit_lcd_on(struct platform_device *pdev)
 		return ret;
 	}
 
+	lcd_isactive = 1;
+
 	pr_info("%s finished\n", __func__);
 	return 0;
 }
@@ -130,6 +131,8 @@ static int mipi_lgit_lcd_off(struct platform_device *pdev)
 	int ret = 0;
 
 	pr_info("%s started\n", __func__);
+
+	lcd_isactive = 0;
 
 	if (mipi_lgit_pdata->bl_pwm_disable)
 		mipi_lgit_pdata->bl_pwm_disable();
@@ -142,7 +145,6 @@ static int mipi_lgit_lcd_off(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	lcd_isactive = 0;
 	MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);
 	ret = mipi_dsi_cmds_tx(&lgit_tx_buf,
 			mipi_lgit_pdata->power_off_set_1,
@@ -244,7 +246,7 @@ static void update_power_data(int index, unsigned int *gamma)
 	 * Only attempt to apply if the LCD is active.
 	 * If it isn't, the device will panic-reboot
 	 */
-	if(lcd_isactive) {
+	if (lcd_isactive) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x38, 0x10000000);
 		ret = mipi_dsi_cmds_tx(&lgit_tx_buf, pos,
 					mipi_lgit_pdata->power_on_set_size_1);
