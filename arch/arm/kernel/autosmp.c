@@ -49,7 +49,8 @@ static struct asmp_param_struct {
 	bool scroff_single_core;
 	unsigned int max_cpus;
 	unsigned int min_cpus;
-	unsigned int cpufreq_limit;
+	unsigned int cpufreq_up;
+	unsigned int cpufreq_down;
 	unsigned int cycle_up;
 	unsigned int cycle_down;
 } asmp_param = {
@@ -57,7 +58,8 @@ static struct asmp_param_struct {
 	.scroff_single_core = true,
 	.max_cpus = CONFIG_NR_CPUS,
 	.min_cpus = 1,
-	.cpufreq_limit = 1000, //MHz
+	.cpufreq_up = 1000, //MHz
+	.cpufreq_down = 600, //MHz
 	.cycle_up = 1,
 	.cycle_down = 5,
 };
@@ -82,9 +84,8 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 				slow_rate = rate;
 			} else if (rate > fast_rate)
 				fast_rate = rate;
-		} else { // count cpu0 for fast_rate
+		} else // count cpu0 for fast_rate
 			fast_rate = rate;
-		}
 	}
 	put_online_cpus();
 	fast_rate /= 1000;  // kHz -> MHz
@@ -92,8 +93,8 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 
 	/* hotplug one core if one freq is over the limit and no idle cores */
 	if ((nr_cpu_online < asmp_param.max_cpus) && 
-	    (fast_rate > asmp_param.cpufreq_limit) && 
-	    (slow_rate > asmp_param.cpufreq_limit)) {
+	    (fast_rate > asmp_param.cpufreq_up) && 
+	    (slow_rate > asmp_param.cpufreq_up)) {
 		if (cycle >= asmp_param.cycle_up) {
 			cpu = cpumask_next_zero(0, cpu_online_mask);
 			cpu_up(cpu);
@@ -104,7 +105,7 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 		}
 	/* unplug one core if cpufreq is under the limit */
 	} else if ((nr_cpu_online > asmp_param.min_cpus) &&
-		   (slow_rate < asmp_param.cpufreq_limit)) {
+		   (slow_rate < asmp_param.cpufreq_down)) {
 		if (cycle >= asmp_param.cycle_down) { // but not so soon 
 			if (slow_cpu) 
 				cpu_down(slow_cpu);
@@ -209,7 +210,8 @@ show_one(delay, delay);
 show_one(scroff_single_core, scroff_single_core);
 show_one(min_cpus, min_cpus);
 show_one(max_cpus, max_cpus);
-show_one(cpufreq_limit,cpufreq_limit);
+show_one(cpufreq_up,cpufreq_up);
+show_one(cpufreq_down,cpufreq_down);
 show_one(cycle_up, cycle_up);
 show_one(cycle_down, cycle_down);
 
@@ -230,7 +232,8 @@ store_one(delay, delay);
 store_one(scroff_single_core, scroff_single_core);
 store_one(min_cpus, min_cpus);
 store_one(max_cpus, max_cpus);
-store_one(cpufreq_limit, cpufreq_limit);
+store_one(cpufreq_up, cpufreq_up);
+store_one(cpufreq_down, cpufreq_down);
 store_one(cycle_up, cycle_up);
 store_one(cycle_down, cycle_down);
 
@@ -239,7 +242,8 @@ static struct attribute *asmp_attributes[] = {
 	&scroff_single_core.attr,
 	&min_cpus.attr,
 	&max_cpus.attr,
-	&cpufreq_limit.attr,
+	&cpufreq_up.attr,
+	&cpufreq_down.attr,
 	&cycle_up.attr,
 	&cycle_down.attr,
 	NULL
