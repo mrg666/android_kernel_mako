@@ -28,7 +28,6 @@
 #include <linux/workqueue.h>
 #include <linux/cpu.h>
 #include <linux/cpumask.h>
-#include <asm-generic/cputime.h>
 #include <linux/hrtimer.h>
 #include <linux/rq_stats.h>
 
@@ -56,8 +55,8 @@ static struct asmp_param_struct {
 	unsigned int min_cpus;
 	unsigned int load_limit_up;
 	unsigned int load_limit_down;
-	unsigned int time_limit_up;
-	unsigned int time_limit_down;
+	unsigned int cycle_up;
+	unsigned int cycle_down;
 } asmp_param = {
 	.delay = 100,
 	.scroff_single_core = true,
@@ -65,12 +64,11 @@ static struct asmp_param_struct {
 	.min_cpus = 1,
 	.load_limit_up = 25,
 	.load_limit_down = 5,
-	.time_limit_up = 90,
-	.time_limit_down = 450,
+	.cycle_up = 1,
+	.cycle_down = 5,
 };
 
-static cputime64_t delta_time = 0;
-static cputime64_t last_time;
+static unsigned int cycle;
 static int enabled = 1;
 
 unsigned int get_rq_avg(void) {
@@ -87,14 +85,12 @@ unsigned int get_rq_avg(void) {
 #if CONFIG_NR_CPUS > 2
 static int get_slowest_cpu(void) {
 	int cpu, slow_cpu = 1;
-	struct cpufreq_policy policy;
 	unsigned long rate, slow_rate = ULONG_MAX;
 
 	get_online_cpus(); 
 	for_each_online_cpu(cpu)
 		if (cpu > 0) {
-			cpufreq_get_policy(&policy, cpu);
-			rate = policy.cur;
+			rate = cpufreq_get(cpu);
 			if (rate < slow_rate) {
 				slow_cpu = cpu;
 				slow_rate = rate;
@@ -120,35 +116,32 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	unsigned int cpu = 1;
 	int nr_cpu_online;
 	unsigned int rq_avg;
-	cputime64_t current_time;
 
-	current_time = ktime_to_ms(ktime_get());
-	delta_time += current_time - last_time;
-	last_time = current_time;
-
+	cycle++;
+	
 	rq_avg = get_rq_avg();
 	nr_cpu_online = num_online_cpus();
 
 	if ((nr_cpu_online < asmp_param.max_cpus) && 
 	    (rq_avg >= asmp_param.load_limit_up)) {
-		if (delta_time >= asmp_param.time_limit_up) {
+		if (cycle >= asmp_param.cycle_up) {
 #if CONFIG_NR_CPUS > 2
 			cpu = cpumask_next_zero(0, cpu_online_mask);
 #endif
 			cpu_up(cpu);
-			delta_time = 0;
+			cycle = 0;
 #if DEBUG
 			pr_info(ASMP_TAG"CPU[%d] on\n", cpu);
 #endif
 		}
 	} else if ((nr_cpu_online > asmp_param.min_cpus) &&
 		   (rq_avg <= asmp_param.load_limit_down)) {
-		if (delta_time >= asmp_param.time_limit_down) {
+		if (cycle >= asmp_param.cycle_down) {
 #if CONFIG_NR_CPUS > 2
 			cpu = get_slowest_cpu();
 #endif
 			cpu_down(cpu);
-			delta_time = 0;
+			cycle = 0;
 #if STATS
 			per_cpu(asmp_cpudata, cpu).times_hotplugged += 1;
 #endif
@@ -257,8 +250,8 @@ show_one(min_cpus, min_cpus);
 show_one(max_cpus, max_cpus);
 show_one(load_limit_up, load_limit_up);
 show_one(load_limit_down, load_limit_down);
-show_one(time_limit_up, time_limit_up);
-show_one(time_limit_down, time_limit_down);
+show_one(cycle_up, cycle_up);
+show_one(cycle_down, cycle_down);
 
 #define store_one(file_name, object)					\
 static ssize_t store_##file_name					\
@@ -279,8 +272,8 @@ store_one(max_cpus, max_cpus);
 store_one(min_cpus, min_cpus);
 store_one(load_limit_up, load_limit_up);
 store_one(load_limit_down, load_limit_down);
-store_one(time_limit_up, time_limit_up);
-store_one(time_limit_down, time_limit_down);
+store_one(cycle_up, cycle_up);
+store_one(cycle_down, cycle_down);
 
 static struct attribute *asmp_attributes[] = {
 	&delay.attr,
@@ -289,8 +282,8 @@ static struct attribute *asmp_attributes[] = {
 	&max_cpus.attr,
 	&load_limit_up.attr,
 	&load_limit_down.attr,
-	&time_limit_up.attr,
-	&time_limit_down.attr,
+	&cycle_up.attr,
+	&cycle_down.attr,
 	NULL
 };
 
@@ -339,7 +332,7 @@ static int __init asmp_init(void) {
 	rq_info.hotplug_disabled = 0;
 	rq_info.init = 1;
 
-	last_time = ktime_to_ms(ktime_get());
+	cycle = 0;
 	for_each_possible_cpu(cpu)
 		per_cpu(asmp_cpudata, cpu).times_hotplugged = 0;
 
