@@ -77,7 +77,7 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	get_online_cpus(); 
 	nr_cpu_online = num_online_cpus();
 	for_each_online_cpu(cpu) {
-		rate = cpufreq_get(cpu);
+		rate = cpufreq_quick_get(cpu);
 		if (cpu) { // count only nonboot cores for slow_rate
 			if (rate <= slow_rate) {
 				slow_cpu = cpu;
@@ -114,7 +114,7 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 			per_cpu(asmp_cpudata, cpu).times_hotplugged += 1;
 #endif
 #if DEBUG
-			pr_info(ASMP_TAG"CPU[%d] off\n", cpu);
+			pr_info(ASMP_TAG"CPU[%d] off\n", slow_cpu);
 #endif
 		}
 	}
