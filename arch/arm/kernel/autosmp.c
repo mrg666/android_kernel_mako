@@ -61,41 +61,42 @@ static struct asmp_param_struct {
 	.cpufreq_up = 1000, //MHz
 	.cpufreq_down = 600, //MHz
 	.cycle_up = 1,
-	.cycle_down = 5,
+	.cycle_down = 3,
 };
 
 static unsigned int cycle;
 static int enabled = 1;
 
 static void __cpuinit asmp_work_fn(struct work_struct *work) {
-	unsigned int cpu, slow_cpu = 0;
-	unsigned int rate, slow_rate = UINT_MAX, fast_rate = 0;
+	unsigned int cpu = 0, slow_cpu = 0;
+	unsigned int rate, cpu0_rate, slow_rate = UINT_MAX, fast_rate;
 	int nr_cpu_online;
 
 	cycle++;
-	/* work in sync with cpu governor to estimate load based on freq */
+	/* find max and min cpu freq to estimate load */
 	get_online_cpus(); 
 	nr_cpu_online = num_online_cpus();
-	for_each_online_cpu(cpu) {
-		rate = cpufreq_quick_get(cpu);
-		if (cpu) { // count only nonboot cores for slow_rate
+	cpu0_rate = cpufreq_quick_get(cpu);
+	fast_rate = cpu0_rate;
+	for_each_online_cpu(cpu)
+		if (cpu) {
+			rate = cpufreq_quick_get(cpu);
 			if (rate <= slow_rate) {
 				slow_cpu = cpu;
 				slow_rate = rate;
-			} else if (rate > fast_rate)
+			} else if (rate > fast_rate) 
 				fast_rate = rate;
-		} else // count cpu0 for fast_rate
-			fast_rate = rate;
-	}
+		} 
 	put_online_cpus();
-	fast_rate /= 1000;  // kHz -> MHz
-	slow_rate /= 1000;
+	if (cpu0_rate < slow_rate) 
+		slow_rate = cpu0_rate;
+	slow_rate /= 1000;  // kHz -> MHz
+	fast_rate /= 1000;
 
-	/* hotplug one core if one freq is over the limit and no idle cores */
-	if ((nr_cpu_online < asmp_param.max_cpus) && 
-	    (fast_rate > asmp_param.cpufreq_up) && 
-	    (slow_rate > asmp_param.cpufreq_up)) {
-		if (cycle >= asmp_param.cycle_up) {
+	/* hotplug one core if all online cores are over up freq limit */
+	if (slow_rate > asmp_param.cpufreq_up) {
+		if ((nr_cpu_online < asmp_param.max_cpus) && 
+		    (cycle >= asmp_param.cycle_up)) {
 			cpu = cpumask_next_zero(0, cpu_online_mask);
 			cpu_up(cpu);
 			cycle = 0;
@@ -103,12 +104,11 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 			pr_info(ASMP_TAG"CPU[%d] on\n", cpu);
 #endif
 		}
-	/* unplug one core if cpufreq is under the limit */
-	} else if ((nr_cpu_online > asmp_param.min_cpus) &&
-		   (slow_rate < asmp_param.cpufreq_down)) {
-		if (cycle >= asmp_param.cycle_down) { // but not so soon 
-			if (slow_cpu) 
-				cpu_down(slow_cpu);
+	/* unplug slowest core if all online cores are under down freq limit */
+	} else if (slow_cpu && (fast_rate < asmp_param.cpufreq_down)) {
+		if ((nr_cpu_online > asmp_param.min_cpus) &&
+		    (cycle >= asmp_param.cycle_down)) { // but not so soon 
+			cpu_down(slow_cpu);
 			cycle = 0;
 #if STATS
 			per_cpu(asmp_cpudata, cpu).times_hotplugged += 1;
