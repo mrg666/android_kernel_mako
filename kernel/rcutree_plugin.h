@@ -25,6 +25,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/smpboot.h>
 
 #define RCU_KTHREAD_PRIO 1
 
