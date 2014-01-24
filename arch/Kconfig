@@ -222,4 +222,14 @@ config HAVE_CMPXCHG_DOUBLE
 config ARCH_WANT_OLD_COMPAT_IPC
 	bool
 
+config HAVE_RCU_USER_QS
+	bool
+	help
+	  Provide kernel entry/exit hooks necessary for userspace
+	  RCU extended quiescent state. Syscalls need to be wrapped inside
+	  rcu_user_exit()-rcu_user_enter() through the slow path using
+	  TIF_NOHZ flag. Exceptions handlers must be wrapped as well. Irqs
+	  are already protected inside rcu_irq_enter/rcu_irq_exit() but
+	  preemption or signal handling on irq exit still need to be protected.
+
 source "kernel/gcov/Kconfig"
