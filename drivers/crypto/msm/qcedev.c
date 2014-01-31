@@ -12,7 +12,6 @@
  * GNU General Public License for more details.
  */
 #include <linux/mman.h>
-#include <linux/android_pmem.h>
 #include <linux/types.h>
 #include <linux/platform_device.h>
 #include <linux/dma-mapping.h>
