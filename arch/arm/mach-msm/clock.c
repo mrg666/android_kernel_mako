@@ -450,7 +450,6 @@ int msm_clock_register(struct clk_lookup *table, size_t size)
 		return -EINVAL;
 
 	clkdev_add_table(table, size);
-	clock_debug_register(table, size);
 
 	return 0;
 }
@@ -551,9 +550,6 @@ int __init msm_clock_init(struct clock_init_data *data)
 
 	if (clk_init_data->post_init)
 		clk_init_data->post_init();
-
-	clock_debug_init();
-	clock_debug_register(clock_tbl, num_clocks);
 
 	return 0;
 }

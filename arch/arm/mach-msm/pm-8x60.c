@@ -870,9 +870,6 @@ int msm_pm_idle_enter(enum msm_pm_sleep_mode sleep_mode)
 		if (sleep_delay == 0) /* 0 would mean infinite time */
 			sleep_delay = 1;
 
-		if (MSM_PM_DEBUG_IDLE_CLK & msm_pm_debug_mask)
-			clock_debug_print_enabled();
-
 		if (pm_sleep_ops.enter_sleep)
 			ret = pm_sleep_ops.enter_sleep(sleep_delay,
 					msm_pm_idle_rs_limits,
@@ -1037,8 +1034,6 @@ static int msm_pm_enter(suspend_state_t state)
 
 		if (MSM_PM_DEBUG_SUSPEND & msm_pm_debug_mask)
 			pr_info("%s: power collapse\n", __func__);
-
-		clock_debug_print_enabled();
 
 #ifdef CONFIG_MSM_SLEEP_TIME_OVERRIDE
 		if (msm_pm_sleep_time_override > 0) {
