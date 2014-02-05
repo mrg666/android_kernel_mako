@@ -128,7 +128,9 @@ obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_device.o
 obj-$(CONFIG_MSM_IPC_ROUTER) += ipc_router.o
 obj-$(CONFIG_MSM_IPC_ROUTER)+= ipc_socket.o
+ifdef CONFIG_MSM_SMD_LOGGING
 obj-$(CONFIG_DEBUG_FS) += smd_rpc_sym.o
+endif
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_servers.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_clients.o
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_xdr.o
