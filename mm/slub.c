@@ -1527,7 +1527,6 @@ static inline void *acquire_slab(struct kmem_cache *s,
 			freelist, counters,
 			new.freelist, new.counters,
 			"acquire_slab"))
-
 		return NULL;
 
 	remove_partial(n, page);
