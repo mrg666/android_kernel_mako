@@ -587,12 +587,6 @@ void kmem_cache_free(struct kmem_cache *c, void *b)
 }
 EXPORT_SYMBOL(kmem_cache_free);
 
-unsigned int kmem_cache_size(struct kmem_cache *c)
-{
-	return c->size;
-}
-EXPORT_SYMBOL(kmem_cache_size);
-
 int __kmem_cache_shutdown(struct kmem_cache *c)
 {
 	/* No way to check for remaining objects */
