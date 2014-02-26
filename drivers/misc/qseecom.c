@@ -222,6 +222,8 @@ struct qseecom_client_handle {
 	uint32_t user_virt_sb_base;
 	size_t sb_length;
 	struct ion_handle *ihandle;		/* Retrieve phy addr */
+	bool  perf_enabled;
+	bool  fast_load_enabled;
 };
 
 struct qseecom_listener_handle {
@@ -248,8 +250,8 @@ struct clk *ce_core_src_clk;
 struct clk *ce_bus_clk;
 
 /* Function proto types */
-static int qsee_vote_for_clock(int32_t);
-static void qsee_disable_clock_vote(int32_t);
+static int qsee_vote_for_clock(struct qseecom_dev_handle *, int32_t);
+static void qsee_disable_clock_vote(struct qseecom_dev_handle *, int32_t);
 
 static int __qseecom_is_svc_unique(struct qseecom_dev_handle *data,
 		struct qseecom_register_listener_req *svc)
@@ -614,7 +616,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 		return -EFAULT;
 	}
 	/* Vote for the SFPB clock */
-	ret = qsee_vote_for_clock(CLK_SFPB);
+	ret = qsee_vote_for_clock(data, CLK_SFPB);
 	if (ret)
 		pr_warning("Unable to vote for SFPB clock");
 	req.qsee_cmd_id = QSEOS_APP_LOOKUP_COMMAND;
@@ -647,7 +649,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 					load_img_req.ifd_data_fd);
 		if (IS_ERR_OR_NULL(ihandle)) {
 			pr_err("Ion client could not retrieve the handle\n");
-			qsee_disable_clock_vote(CLK_SFPB);
+			qsee_disable_clock_vote(data, CLK_SFPB);
 			return -ENOMEM;
 		}
 
@@ -675,7 +677,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 			pr_err("scm_call rsp.result is QSEOS_RESULT_FAILURE\n");
 			if (!IS_ERR_OR_NULL(ihandle))
 				ion_free(qseecom.ion_clnt, ihandle);
-			qsee_disable_clock_vote(CLK_SFPB);
+			qsee_disable_clock_vote(data, CLK_SFPB);
 			return -EFAULT;
 		}
 
@@ -686,7 +688,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 					ret);
 				if (!IS_ERR_OR_NULL(ihandle))
 					ion_free(qseecom.ion_clnt, ihandle);
-				qsee_disable_clock_vote(CLK_SFPB);
+				qsee_disable_clock_vote(data, CLK_SFPB);
 				return ret;
 			}
 		}
@@ -696,7 +698,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 				resp.result);
 			if (!IS_ERR_OR_NULL(ihandle))
 				ion_free(qseecom.ion_clnt, ihandle);
-			qsee_disable_clock_vote(CLK_SFPB);
+			qsee_disable_clock_vote(data, CLK_SFPB);
 			return -EFAULT;
 		}
 
@@ -705,7 +707,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 		entry = kmalloc(sizeof(*entry), GFP_KERNEL);
 		if (!entry) {
 			pr_err("kmalloc failed\n");
-			qsee_disable_clock_vote(CLK_SFPB);
+			qsee_disable_clock_vote(data, CLK_SFPB);
 			return -ENOMEM;
 		}
 		entry->app_id = app_id;
@@ -728,10 +730,10 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
 	if (copy_to_user(argp, &load_img_req, sizeof(load_img_req))) {
 		pr_err("copy_to_user failed\n");
 		kzfree(entry);
-		qsee_disable_clock_vote(CLK_SFPB);
+		qsee_disable_clock_vote(data, CLK_SFPB);
 		return -EFAULT;
 	}
-	qsee_disable_clock_vote(CLK_SFPB);
+	qsee_disable_clock_vote(data, CLK_SFPB);
 	return 0;
 }
 
@@ -1180,7 +1182,7 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 	/* Populate the remaining parameters */
 	load_req.qsee_cmd_id = QSEOS_APP_START_COMMAND;
 	memcpy(load_req.app_name, appname, MAX_APP_NAME_SIZE);
-	ret = qsee_vote_for_clock(CLK_SFPB);
+	ret = qsee_vote_for_clock(data, CLK_SFPB);
 	if (ret) {
 		kzfree(img_data);
 		pr_warning("Unable to vote for SFPB clock");
@@ -1194,7 +1196,7 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 	kzfree(img_data);
 	if (ret) {
 		pr_err("scm_call to load failed : ret %d\n", ret);
-		qsee_disable_clock_vote(CLK_SFPB);
+		qsee_disable_clock_vote(data, CLK_SFPB);
 		return -EIO;
 	}
 
@@ -1217,7 +1219,7 @@ static int __qseecom_load_fw(struct qseecom_dev_handle *data, char *appname)
 		ret = -EINVAL;
 		break;
 	}
-	qsee_disable_clock_vote(CLK_SFPB);
+	qsee_disable_clock_vote(data, CLK_SFPB);
 
 	return ret;
 }
@@ -1474,6 +1476,10 @@ int qseecom_shutdown_app(struct qseecom_handle **handle)
 		pr_err("Unable to find the handle, exiting\n");
 	else
 		ret = qseecom_unload_app(data);
+	if (data->client.fast_load_enabled == true)
+		qsee_disable_clock_vote(data, CLK_SFPB);
+	if (data->client.perf_enabled == true)
+		qsee_disable_clock_vote(data, CLK_DFAB);
 	if (ret == 0) {
 		kzfree(data);
 		kzfree(*handle);
@@ -1527,17 +1533,17 @@ int qseecom_set_bandwidth(struct qseecom_handle *handle, bool high)
 		return -EINVAL;
 	}
 	if (high) {
-		ret = qsee_vote_for_clock(CLK_DFAB);
+		ret = qsee_vote_for_clock(handle->dev, CLK_DFAB);
 		if (ret)
 			pr_err("Failed to vote for DFAB clock%d\n", ret);
-		ret = qsee_vote_for_clock(CLK_SFPB);
+		ret = qsee_vote_for_clock(handle->dev, CLK_SFPB);
 		if (ret) {
 			pr_err("Failed to vote for SFPB clock%d\n", ret);
-			qsee_disable_clock_vote(CLK_DFAB);
+			qsee_disable_clock_vote(handle->dev, CLK_DFAB);
 		}
 	} else {
-		qsee_disable_clock_vote(CLK_DFAB);
-		qsee_disable_clock_vote(CLK_SFPB);
+		qsee_disable_clock_vote(handle->dev, CLK_DFAB);
+		qsee_disable_clock_vote(handle->dev, CLK_SFPB);
 	}
 	return ret;
 }
@@ -1567,7 +1573,8 @@ static int qseecom_get_qseos_version(struct qseecom_dev_handle *data,
 	return 0;
 }
 
-static int qsee_vote_for_clock(int32_t clk_type)
+static int qsee_vote_for_clock(struct qseecom_dev_handle *data,
+						int32_t clk_type)
 {
 	int ret = 0;
 
@@ -1591,10 +1598,13 @@ static int qsee_vote_for_clock(int32_t clk_type)
 			if (ret)
 				pr_err("DFAB Bandwidth req failed (%d)\n",
 								ret);
-			else
+			else {
 				qsee_bw_count++;
+				data->client.perf_enabled = true;
+			}
 		} else {
 			qsee_bw_count++;
+			data->client.perf_enabled = true;
 		}
 		mutex_unlock(&qsee_bw_mutex);
 		break;
@@ -1615,10 +1625,13 @@ static int qsee_vote_for_clock(int32_t clk_type)
 			if (ret)
 				pr_err("SFPB Bandwidth req failed (%d)\n",
 								ret);
-			else
+			else {
 				qsee_sfpb_bw_count++;
+				data->client.fast_load_enabled = true;
+			}
 		} else {
 			qsee_sfpb_bw_count++;
+			data->client.fast_load_enabled = true;
 		}
 		mutex_unlock(&qsee_bw_mutex);
 		break;
@@ -1629,7 +1642,8 @@ static int qsee_vote_for_clock(int32_t clk_type)
 	return ret;
 }
 
-static void qsee_disable_clock_vote(int32_t clk_type)
+static void qsee_disable_clock_vote(struct qseecom_dev_handle *data,
+						int32_t clk_type)
 {
 	int32_t ret = 0;
 
@@ -1645,7 +1659,7 @@ static void qsee_disable_clock_vote(int32_t clk_type)
 			return;
 		}
 
-		if ((qsee_bw_count > 0) && (qsee_bw_count-- == 1)) {
+		if (qsee_bw_count == 1) {
 			if (qsee_sfpb_bw_count > 0)
 				ret = msm_bus_scale_client_update_request(
 						qsee_perf_client, 2);
@@ -1659,6 +1673,13 @@ static void qsee_disable_clock_vote(int32_t clk_type)
 			if (ret)
 				pr_err("SFPB Bandwidth req fail (%d)\n",
 								ret);
+			else {
+				qsee_bw_count--;
+				data->client.perf_enabled = false;
+			}
+		} else {
+			qsee_bw_count--;
+			data->client.perf_enabled = false;
 		}
 		mutex_unlock(&qsee_bw_mutex);
 		break;
@@ -1669,7 +1690,7 @@ static void qsee_disable_clock_vote(int32_t clk_type)
 			mutex_unlock(&qsee_bw_mutex);
 			return;
 		}
-		if ((qsee_sfpb_bw_count > 0) && (qsee_sfpb_bw_count-- == 1)) {
+		if (qsee_sfpb_bw_count == 1) {
 			if (qsee_bw_count > 0)
 				ret = msm_bus_scale_client_update_request(
 						qsee_perf_client, 1);
@@ -1683,6 +1704,13 @@ static void qsee_disable_clock_vote(int32_t clk_type)
 			if (ret)
 				pr_err("SFPB Bandwidth req fail (%d)\n",
 								ret);
+			else {
+				qsee_sfpb_bw_count--;
+				data->client.fast_load_enabled = false;
+			}
+		} else {
+			qsee_sfpb_bw_count--;
+			data->client.fast_load_enabled = false;
 		}
 		mutex_unlock(&qsee_bw_mutex);
 		break;
@@ -2011,10 +2039,10 @@ static long qseecom_ioctl(struct file *file, unsigned cmd,
 	}
 	case QSEECOM_IOCTL_PERF_ENABLE_REQ:{
 		atomic_inc(&data->ioctl_count);
-		ret = qsee_vote_for_clock(CLK_DFAB);
+		ret = qsee_vote_for_clock(data, CLK_DFAB);
 		if (ret)
 			pr_err("Failed to vote for DFAB clock%d\n", ret);
-		ret = qsee_vote_for_clock(CLK_SFPB);
+		ret = qsee_vote_for_clock(data, CLK_SFPB);
 		if (ret)
 			pr_err("Failed to vote for SFPB clock%d\n", ret);
 		atomic_dec(&data->ioctl_count);
@@ -2022,8 +2050,8 @@ static long qseecom_ioctl(struct file *file, unsigned cmd,
 	}
 	case QSEECOM_IOCTL_PERF_DISABLE_REQ:{
 		atomic_inc(&data->ioctl_count);
-		qsee_disable_clock_vote(CLK_DFAB);
-		qsee_disable_clock_vote(CLK_SFPB);
+		qsee_disable_clock_vote(data, CLK_DFAB);
+		qsee_disable_clock_vote(data, CLK_SFPB);
 		atomic_dec(&data->ioctl_count);
 		break;
 	}
@@ -2099,6 +2127,10 @@ static int qseecom_release(struct inode *inode, struct file *file)
 			return ret;
 		}
 	}
+	if (data->client.fast_load_enabled == true)
+		qsee_disable_clock_vote(data, CLK_SFPB);
+	if (data->client.perf_enabled == true)
+		qsee_disable_clock_vote(data, CLK_DFAB);
 
 	kfree(data);
 
