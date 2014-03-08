@@ -28,13 +28,6 @@
 
 static int ramfs_nommu_setattr(struct dentry *, struct iattr *);
 
-const struct address_space_operations ramfs_aops = {
-	.readpage		= simple_readpage,
-	.write_begin		= simple_write_begin,
-	.write_end		= simple_write_end,
-	.set_page_dirty		= __set_page_dirty_no_writeback,
-};
-
 const struct file_operations ramfs_file_operations = {
 	.mmap			= ramfs_nommu_mmap,
 	.get_unmapped_area	= ramfs_nommu_get_unmapped_area,
