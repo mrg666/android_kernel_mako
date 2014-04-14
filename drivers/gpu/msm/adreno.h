@@ -507,6 +507,8 @@ int adreno_perfcounter_put(struct adreno_device *adreno_dev,
 
 int adreno_soft_reset(struct kgsl_device *device);
 
+int adreno_a3xx_pwron_fixup_init(struct adreno_device *adreno_dev);
+
 static inline int adreno_is_a200(struct adreno_device *adreno_dev)
 {
 	return (adreno_dev->gpurev == ADRENO_REV_A200);
