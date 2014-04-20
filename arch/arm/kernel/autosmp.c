@@ -71,7 +71,6 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 
 	cycle++;
 	/* find max and min cpu freq to estimate load */
-	get_online_cpus(); 
 	nr_cpu_online = num_online_cpus();
 	cpu0_rate = cpufreq_quick_get(cpu);
 	fast_rate = cpu0_rate;
@@ -84,7 +83,6 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 			} else if (rate > fast_rate) 
 				fast_rate = rate;
 		} 
-	put_online_cpus();
 	if (cpu0_rate < slow_rate) 
 		slow_rate = cpu0_rate;
 	slow_rate /= 1000;  // kHz -> MHz
