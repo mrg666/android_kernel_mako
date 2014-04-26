@@ -48,6 +48,14 @@
 #define KGSL_END_OF_FRAME_IDENTIFIER	0x2E0F2E0F
 #define KGSL_NOP_IB_IDENTIFIER	        0x20F20F20
 
+#ifdef CONFIG_MSM_SCM
+#define ADRENO_DEFAULT_PWRSCALE_POLICY  (&kgsl_pwrscale_policy_tz)
+#elif defined CONFIG_MSM_SLEEP_STATS_DEVICE
+#define ADRENO_DEFAULT_PWRSCALE_POLICY  (&kgsl_pwrscale_policy_idlestats)
+#else
+#define ADRENO_DEFAULT_PWRSCALE_POLICY  NULL
+#endif
+
 #define ADRENO_ISTORE_START 0x5000 /* Istore offset */
 
 #define ADRENO_NUM_CTX_SWITCH_ALLOWED_BEFORE_DRAW	50
