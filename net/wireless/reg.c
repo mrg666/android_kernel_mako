@@ -1322,6 +1322,8 @@ static int ignore_request(struct wiphy *wiphy,
 	case NL80211_REGDOM_SET_BY_CORE:
 		return 0;
 	case NL80211_REGDOM_SET_BY_COUNTRY_IE:
+		if (wiphy->country_ie_pref & NL80211_COUNTRY_IE_IGNORE_CORE)
+			return -EALREADY;
 
 		last_wiphy = wiphy_idx_to_wiphy(last_request->wiphy_idx);
 
