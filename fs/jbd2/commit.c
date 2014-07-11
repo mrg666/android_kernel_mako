@@ -1029,21 +1029,6 @@ restart_loop:
 	trace_jbd2_run_stats(journal->j_fs_dev->bd_dev,
 			     commit_transaction->t_tid, &stats.run);
 
-	/*
-	 * Calculate overall stats
-	 */
-	spin_lock(&journal->j_history_lock);
-	journal->j_stats.ts_tid++;
-	journal->j_stats.run.rs_wait += stats.run.rs_wait;
-	journal->j_stats.run.rs_running += stats.run.rs_running;
-	journal->j_stats.run.rs_locked += stats.run.rs_locked;
-	journal->j_stats.run.rs_flushing += stats.run.rs_flushing;
-	journal->j_stats.run.rs_logging += stats.run.rs_logging;
-	journal->j_stats.run.rs_handle_count += stats.run.rs_handle_count;
-	journal->j_stats.run.rs_blocks += stats.run.rs_blocks;
-	journal->j_stats.run.rs_blocks_logged += stats.run.rs_blocks_logged;
-	spin_unlock(&journal->j_history_lock);
-
 	commit_transaction->t_state = T_COMMIT_CALLBACK;
 	J_ASSERT(commit_transaction == journal->j_committing_transaction);
 	journal->j_commit_sequence = commit_transaction->t_tid;
@@ -1099,4 +1084,19 @@ restart_loop:
 	spin_unlock(&journal->j_list_lock);
 	write_unlock(&journal->j_state_lock);
 	wake_up(&journal->j_wait_done_commit);
+
+	/*
+	 * Calculate overall stats
+	 */
+	spin_lock(&journal->j_history_lock);
+	journal->j_stats.ts_tid++;
+	journal->j_stats.run.rs_wait += stats.run.rs_wait;
+	journal->j_stats.run.rs_running += stats.run.rs_running;
+	journal->j_stats.run.rs_locked += stats.run.rs_locked;
+	journal->j_stats.run.rs_flushing += stats.run.rs_flushing;
+	journal->j_stats.run.rs_logging += stats.run.rs_logging;
+	journal->j_stats.run.rs_handle_count += stats.run.rs_handle_count;
+	journal->j_stats.run.rs_blocks += stats.run.rs_blocks;
+	journal->j_stats.run.rs_blocks_logged += stats.run.rs_blocks_logged;
+	spin_unlock(&journal->j_history_lock);
 }
