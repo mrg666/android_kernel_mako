@@ -55,8 +55,8 @@ static struct asmp_param_struct {
 	.scroff_single_core = true,
 	.max_cpus = CONFIG_NR_CPUS,
 	.min_cpus = 1,
-	.cpufreq_up = 1000, //MHz
-	.cpufreq_down = 600, //MHz
+	.cpufreq_up = 1000000, //kHz
+	.cpufreq_down = 600000, //kHz
 	.cycle_up = 1,
 	.cycle_down = 3,
 };
@@ -85,8 +85,6 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 		} 
 	if (cpu0_rate < slow_rate) 
 		slow_rate = cpu0_rate;
-	slow_rate /= 1000;  // kHz -> MHz
-	fast_rate /= 1000;
 
 	/* hotplug one core if all online cores are over up freq limit */
 	if (slow_rate > asmp_param.cpufreq_up) {
