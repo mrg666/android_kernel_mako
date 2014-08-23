@@ -508,7 +508,6 @@ static ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		return 0;
 
 	log = file_get_log(iocb->ki_filp);
-	orig = log->w_off;
 	now = current_kernel_time();
 
 	header.pid = current->tgid;
@@ -524,6 +523,8 @@ static ssize_t logger_aio_write(struct kiocb *iocb, const struct iovec *iov,
 		return 0;
 
 	mutex_lock(&log->mutex);
+
+	orig = log->w_off;
 
 	/*
 	 * Fix up any readers, pulling them forward to the first readable
