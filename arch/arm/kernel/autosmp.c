@@ -55,8 +55,8 @@ static struct asmp_param_struct {
 	.scroff_single_core = true,
 	.max_cpus = CONFIG_NR_CPUS,
 	.min_cpus = 1,
-	.cpufreq_up = 1200000, //kHz
-	.cpufreq_down = 1000000, //kHz
+	.cpufreq_up = 80,
+	.cpufreq_down = 67,
 	.cycle_up = 1,
 	.cycle_down = 3,
 };
@@ -67,10 +67,18 @@ static int enabled __read_mostly = 1;
 static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	unsigned int cpu = 0, slow_cpu = 0;
 	unsigned int rate, cpu0_rate, slow_rate = UINT_MAX, fast_rate;
+	unsigned int max_rate, up_rate, down_rate;
 	int nr_cpu_online;
 
 	cycle++;
-	/* find max and min cpu freq to estimate load */
+
+	/* get maximum possible freq for cpu0 and
+	   calculate up/down limits */
+	max_rate  = cpufreq_quick_get_max(cpu);
+	up_rate   = asmp_param.cpufreq_up*max_rate/100;
+	down_rate = asmp_param.cpufreq_down*max_rate/100;
+
+	/* find current max and min cpu freq to estimate load */
 	get_online_cpus();
 	nr_cpu_online = num_online_cpus();
 	cpu0_rate = cpufreq_quick_get(cpu);
@@ -88,8 +96,8 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	if (cpu0_rate < slow_rate)
 		slow_rate = cpu0_rate;
 
-	/* hotplug one core if all online cores are over up freq limit */
-	if (slow_rate > asmp_param.cpufreq_up) {
+	/* hotplug one core if all online cores are over up_rate limit */
+	if (slow_rate > up_rate) {
 		if ((nr_cpu_online < asmp_param.max_cpus) &&
 		    (cycle >= asmp_param.cycle_up)) {
 			cpu = cpumask_next_zero(0, cpu_online_mask);
@@ -99,11 +107,11 @@ static void __cpuinit asmp_work_fn(struct work_struct *work) {
 			pr_info(ASMP_TAG"CPU[%d] on\n", cpu);
 #endif
 		}
-	/* unplug slowest core if all online cores are under down freq limit */
-	} else if (slow_cpu && (fast_rate < asmp_param.cpufreq_down)) {
+	/* unplug slowest core if all online cores are under down_rate limit */
+	} else if (slow_cpu && (fast_rate < down_rate)) {
 		if ((nr_cpu_online > asmp_param.min_cpus) &&
-		    (cycle >= asmp_param.cycle_down)) { // but not so soon
-			cpu_down(slow_cpu);
+		    (cycle >= asmp_param.cycle_down)) {
+ 			cpu_down(slow_cpu);
 			cycle = 0;
 #if DEBUG
 			pr_info(ASMP_TAG"CPU[%d] off\n", slow_cpu);
