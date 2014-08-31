@@ -35,10 +35,6 @@
 
 #include <linux/input/lge_touch_core.h>
 
-#ifdef CONFIG_TOUCH_WAKE
-#include <linux/touch_wake.h>
-#endif
-
 struct touch_device_driver*     touch_device_func;
 struct workqueue_struct*        touch_wq;
 
@@ -48,11 +44,6 @@ struct lge_touch_attribute {
 	ssize_t (*store)(struct lge_touch_data *ts,
 				const char *buf, size_t count);
 };
-
-#ifdef CONFIG_TOUCH_WAKE
-static struct lge_touch_data *touchwake_data;
-static unsigned suspending = 0;
-#endif
 
 static int is_pressure;
 static int is_width_major;
@@ -945,14 +936,6 @@ static void touch_work_func(struct work_struct *work)
 
 	if (likely(ts->pdata->role->operation_mode == INTERRUPT_MODE))
 		int_pin = gpio_get_value(ts->pdata->int_pin);
-
-#ifdef CONFIG_TOUCH_WAKE
-	if (unlikely(!suspending && device_is_suspended()) &&
-					touchwake_is_enabled()) {
-		touch_press();
-		goto out;
-	}
-#endif
 
 	/* Accuracy Solution */
 	if (unlikely(ts->pdata->role->accuracy_filter_enable)) {
@@ -2131,9 +2114,6 @@ static int touch_probe(struct i2c_client *client,
 	register_early_suspend(&ts->early_suspend);
 #endif
 
-#ifdef CONFIG_TOUCH_WAKE
-	touchwake_data = ts;
-#endif
 #ifdef CONFIG_DOUBLETAP_WAKE
 	mutex_init(&ts->dt_wake.lock);
 	ts->dt_wake.enabled = 0;
@@ -2345,11 +2325,6 @@ static void touch_early_suspend(struct early_suspend *h)
 	struct lge_touch_data *ts =
 			container_of(h, struct lge_touch_data, early_suspend);
 
-#ifdef CONFIG_TOUCH_WAKE
-	if (touchwake_is_enabled())
-		return;	/* touchwake will handle touchscreen suspend call */
-#endif
-	/* touchwake is not compiled or it's disabled - handle suspend */
 	touch_power_off(ts);
 }
 
@@ -2358,29 +2333,8 @@ static void touch_late_resume(struct early_suspend *h)
 	struct lge_touch_data *ts =
 			container_of(h, struct lge_touch_data, early_suspend);
 
-#ifdef CONFIG_TOUCH_WAKE
-	if (touchwake_is_enabled())
-		return;
-#endif
-	/* touchwake is not compiled or it's disabled - handle wake */
 	touch_power_on(ts);
 }
-#endif
-
-#ifdef CONFIG_TOUCH_WAKE
-void touchscreen_disable(void)
-{
-	suspending = 1;
-	touch_power_off(touchwake_data);
-	suspending = 0;
-}
-EXPORT_SYMBOL(touchscreen_disable);
-
-void touchscreen_enable(void)
-{
-	touch_power_on(touchwake_data);
-}
-EXPORT_SYMBOL(touchscreen_enable);
 #endif
 
 #if defined(CONFIG_PM)
