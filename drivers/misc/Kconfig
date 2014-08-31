@@ -662,6 +662,12 @@ config BU52031NVX_POUCHDETECT
 	help
 	  depends on BU52031NVX
 
+config TOUCH_WAKE
+	bool "Touch Wake support"
+	default y
+	help
+	  Say Y here to enable Touch Wake
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

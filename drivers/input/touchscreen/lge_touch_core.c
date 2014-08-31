@@ -24,6 +24,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/earlysuspend.h>
+#include <linux/pm_runtime.h>
 #include <linux/jiffies.h>
 #include <linux/sysdev.h>
 #include <linux/types.h>
@@ -34,6 +35,10 @@
 
 #include <linux/input/lge_touch_core.h>
 
+#ifdef CONFIG_TOUCH_WAKE
+#include <linux/touch_wake.h>
+#endif
+
 struct touch_device_driver*     touch_device_func;
 struct workqueue_struct*        touch_wq;
 
@@ -43,6 +48,11 @@ struct lge_touch_attribute {
 	ssize_t (*store)(struct lge_touch_data *ts,
 				const char *buf, size_t count);
 };
+
+#ifdef CONFIG_TOUCH_WAKE
+static struct lge_touch_data *touchwake_data;
+static unsigned suspending = 0;
+#endif
 
 static int is_pressure;
 static int is_width_major;
@@ -111,6 +121,8 @@ void* get_touch_handle(struct i2c_client *client)
  */
 int touch_i2c_read(struct i2c_client *client, u8 reg, int len, u8 *buf)
 {
+	int i = 0;
+
 	struct i2c_msg msgs[] = {
 		{
 			.addr = client->addr,
@@ -126,13 +138,17 @@ int touch_i2c_read(struct i2c_client *client, u8 reg, int len, u8 *buf)
 		},
 	};
 
-	if (i2c_transfer(client->adapter, msgs, 2) < 0) {
-		if (printk_ratelimit())
-			TOUCH_ERR_MSG("transfer error\n");
-		return -EIO;
-	} else {
-		return 0;
-	}
+	do {
+		if (i2c_transfer(client->adapter, msgs, 2) == 2)
+			return 0;
+		TOUCH_INFO_MSG("i2c retry\n");
+		/* It should be booting delay, but 10ms works OK */
+		usleep(10000);
+	} while (++i < 10);
+
+	if (printk_ratelimit())
+		TOUCH_ERR_MSG("transfer error\n");
+	return -EIO;
 }
 
 int touch_i2c_write(struct i2c_client *client, u8 reg, int len, u8 * buf)
@@ -342,6 +358,7 @@ static int touch_power_cntl(struct lge_touch_data *ts, int onoff)
  */
 static void safety_reset(struct lge_touch_data *ts)
 {
+	TOUCH_DEBUG_MSG("Safety reset");
 	if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
 		disable_irq(ts->client->irq);
 	else
@@ -741,6 +758,106 @@ static void dump_pointer_trace(void)
 }
 #endif
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+
+/* Checks if there is a touch in the center of the screen */
+static inline int touch_within_limits(struct lge_touch_data *ts, int id)
+{
+	unsigned int dx, dy;
+
+	dx = ts->pdata->caps->lcd_x * DTW_TOUCH_AREA / 100;
+	dy = ts->pdata->caps->lcd_y * DTW_TOUCH_AREA / 100;
+
+	return (ts->ts_data.curr_data[id].x_position > ts->pdata->caps->lcd_x - dx &&
+		ts->ts_data.curr_data[id].x_position < ts->pdata->caps->lcd_x + dx &&
+		ts->ts_data.curr_data[id].y_position > ts->pdata->caps->lcd_y - dy &&
+		ts->ts_data.curr_data[id].y_position < ts->pdata->caps->lcd_y + dy);
+}
+
+static inline void touch_check_dt_wake(struct lge_touch_data *ts, int id)
+{
+	unsigned long diff_time;
+
+	diff_time = jiffies_to_msecs(jiffies - ts->dt_wake.time);
+
+	TOUCH_DEBUG_MSG("diff_time: %lu, hits: %u, x: %u, y: %u, id: %u\n",
+			diff_time, ts->dt_wake.hits,
+			ts->ts_data.curr_data[id].x_position,
+			ts->ts_data.curr_data[id].y_position, id);
+	/* Out of boundary. Reset hits and return */
+	if (!touch_within_limits(ts, id)) {
+		TOUCH_DEBUG_MSG("Out of boundary\n");
+		goto reset;
+	}
+
+	/* Timeout. Reset hits and return */
+	if (ts->dt_wake.touch && diff_time > ts->dt_wake.max_interval) {
+		TOUCH_DEBUG_MSG("Timeout\n");
+		goto reset;
+	}
+
+	/* Touch detected. Set time */
+	if (ts->ts_data.curr_data[id].state != ABS_RELEASE) {
+		if (ts->dt_wake.touch) {
+			TOUCH_DEBUG_MSG("Touch already detected\n");
+		} else {
+			TOUCH_DEBUG_MSG("Touch detected\n");
+			ts->dt_wake.time = jiffies;
+			ts->dt_wake.touch = 1;
+		}
+	} else {
+		/* Touch released. Increase hits */
+		TOUCH_DEBUG_MSG("Touch released. Increase hits\n");
+		ts->dt_wake.hits++;
+
+		ts->ts_data.curr_data[id].state = 0;
+	}
+
+	if (ts->dt_wake.hits < 2)
+		return;
+	
+	/* Double tap detected try to resume */
+	TOUCH_INFO_MSG("Double tap detected try to resume\n");
+
+	if (mutex_trylock(&ts->dt_wake.lock)) {
+		input_report_key(ts->input_dev, KEY_POWER, 1);
+		input_sync(ts->input_dev);
+		msleep(ts->pdata->role->booting_delay);
+		input_report_key(ts->input_dev, KEY_POWER, 0);
+		input_sync(ts->input_dev);
+		mutex_unlock(&ts->dt_wake.lock);
+		wake_unlock(&ts->dt_wake.wlock);
+	}
+
+reset:
+	if (ts->ts_data.curr_data[id].state == ABS_RELEASE)
+		ts->ts_data.curr_data[id].state = 0;
+	ts->dt_wake.hits = 0;
+	ts->dt_wake.touch = 0;
+}
+
+static void touch_input_dt_wake(struct lge_touch_data *ts)
+{
+	int id;
+
+	for (id = 0; id < ts->pdata->caps->max_id; id++) {
+		if (!ts->ts_data.curr_data[id].state)
+			continue;
+
+		if (!id) {
+			wake_lock_timeout(&ts->dt_wake.wlock,
+						ts->dt_wake.lock_timeout);
+			touch_check_dt_wake(ts, id);
+		} else {
+			TOUCH_DEBUG_MSG("No id 0\n");
+			ts->ts_data.curr_data[id].state = 0;
+			ts->dt_wake.hits = 0;
+			ts->dt_wake.touch = 0;
+		}
+	}
+}
+#endif
+
 static void touch_input_report(struct lge_touch_data *ts)
 {
 	int	id;
@@ -759,6 +876,7 @@ static void touch_input_report(struct lge_touch_data *ts)
 					ts->ts_data.curr_data[id].x_position);
 			input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
 					ts->ts_data.curr_data[id].y_position);
+
 			if (is_pressure)
 				input_report_abs(ts->input_dev, ABS_MT_PRESSURE,
 					ts->ts_data.curr_data[id].pressure);
@@ -828,18 +946,31 @@ static void touch_work_func(struct work_struct *work)
 	if (likely(ts->pdata->role->operation_mode == INTERRUPT_MODE))
 		int_pin = gpio_get_value(ts->pdata->int_pin);
 
+#ifdef CONFIG_TOUCH_WAKE
+	if (unlikely(!suspending && device_is_suspended()) &&
+					touchwake_is_enabled()) {
+		touch_press();
+		goto out;
+	}
+#endif
+
 	/* Accuracy Solution */
-	if (likely(ts->pdata->role->accuracy_filter_enable)) {
+	if (unlikely(ts->pdata->role->accuracy_filter_enable)) {
 		if (accuracy_filter_func(ts) < 0)
 			goto out;
 	}
 
 	/* Jitter Solution */
-	if (likely(ts->pdata->role->jitter_filter_enable)) {
+	if (unlikely(ts->pdata->role->jitter_filter_enable)) {
 		if (jitter_filter_func(ts) < 0)
 			goto out;
 	}
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+	if (ts->curr_resume_state == 0 && ts->dt_wake.enabled)
+		touch_input_dt_wake(ts);
+	else
+#endif
 	touch_input_report(ts);
 
 out:
@@ -1466,6 +1597,25 @@ static ssize_t ic_register_ctrl(struct lge_touch_data *ts,
 	return count;
 }
 
+/* show_jitter_solution
+ *
+ * show jitter parameters
+ */
+
+static ssize_t show_jitter_solution(struct lge_touch_data *ts, char *buf)
+{
+	int ret = 0;
+
+	ret = sprintf(buf, "%d %d\n",
+				ts->pdata->role->jitter_filter_enable,
+				ts->jitter_filter.adjust_margin);
+	return ret;
+}
+
+ /* store_jitter_solution
+ *
+ * store jitter parameters
+ */
 static ssize_t store_jitter_solution(struct lge_touch_data *ts,
 						const char *buf, size_t count)
 {
@@ -1479,6 +1629,29 @@ static ssize_t store_jitter_solution(struct lge_touch_data *ts,
 	return count;
 }
 
+/* show_accuracy_solution
+ *
+ * show accuracy filter parameters
+ */
+static ssize_t show_accuracy_solution(struct lge_touch_data *ts, char *buf)
+{
+	int ret = 0;
+
+	ret = sprintf(buf, "%d %d %d %d %d %d %d\n",
+				ts->pdata->role->accuracy_filter_enable,
+				ts->accuracy_filter.ignore_pressure_gap,
+				ts->accuracy_filter.delta_max,
+				ts->accuracy_filter.touch_max_count,
+				ts->accuracy_filter.max_pressure,
+				ts->accuracy_filter.direction_count,
+				ts->accuracy_filter.time_to_max_pressure);
+	return ret;
+}
+
+/* store_accuracy_solution
+ *
+ * store accuracy filter parameters
+ */
 static ssize_t store_accuracy_solution(struct lge_touch_data *ts, const char *buf, size_t count)
 {
 	int ret = 0;
@@ -1560,17 +1733,61 @@ static ssize_t show_charger(struct lge_touch_data *ts, char *buf)
 	return sprintf(buf, "%d\n", ts->charger_type);
 }
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+/* show_dt_wake_enabled
+ *
+ * Show if doubletap to wake functionality is enabled/disabled.
+ */
+static ssize_t show_dt_wake_enabled(struct lge_touch_data *ts, char *buf)
+{
+	int ret = 0;
+
+	ret = sprintf(buf, "%u\n", ts->dt_wake.enabled);
+
+	return ret;
+}
+
+/* store_dt_wake_enabled
+ *
+ * Enabled/Disable doubletap to wake functionality.
+ */
+static ssize_t store_dt_wake_enabled(struct lge_touch_data *ts, const char *buf,
+								size_t count)
+{
+	unsigned int value;
+	int ret;
+
+	ret = sscanf(buf, "%u", &value);
+	if (value < 0 || value > 1)
+		return -EINVAL;
+
+	if (ts->curr_resume_state == 0) {
+		ts->dt_wake.pending_status = value;
+		ts->dt_wake.pending = 1;
+	} else
+		ts->dt_wake.enabled = value;
+
+	return count;
+}
+#endif
+
 static LGE_TOUCH_ATTR(platform_data, S_IRUGO | S_IWUSR, show_platform_data, NULL);
 static LGE_TOUCH_ATTR(firmware, S_IRUGO | S_IWUSR, show_fw_info, store_fw_upgrade);
 static LGE_TOUCH_ATTR(fw_ver, S_IRUGO | S_IWUSR, show_fw_ver, NULL);
 static LGE_TOUCH_ATTR(reset, S_IRUGO | S_IWUSR, NULL, store_ts_reset);
 static LGE_TOUCH_ATTR(ic_rw, S_IRUGO | S_IWUSR, NULL, ic_register_ctrl);
-static LGE_TOUCH_ATTR(jitter, S_IRUGO | S_IWUSR, NULL, store_jitter_solution);
-static LGE_TOUCH_ATTR(accuracy, S_IRUGO | S_IWUSR, NULL, store_accuracy_solution);
+static LGE_TOUCH_ATTR(jitter, S_IRUGO | S_IWUSR, show_jitter_solution,
+							store_jitter_solution);
+static LGE_TOUCH_ATTR(accuracy, S_IRUGO | S_IWUSR, show_accuracy_solution,
+						store_accuracy_solution);
 static LGE_TOUCH_ATTR(show_touches, S_IRUGO | S_IWUSR, show_show_touches, store_show_touches);
 static LGE_TOUCH_ATTR(pointer_location, S_IRUGO | S_IWUSR, show_pointer_location,
 					store_pointer_location);
 static LGE_TOUCH_ATTR(charger, S_IRUGO | S_IWUSR, show_charger, NULL);
+#ifdef CONFIG_DOUBLETAP_WAKE
+static LGE_TOUCH_ATTR(dt_wake_enabled, S_IRUGO | S_IWUSR, show_dt_wake_enabled,
+					store_dt_wake_enabled);
+#endif
 
 static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_platform_data.attr,
@@ -1583,6 +1800,9 @@ static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_show_touches.attr,
 	&lge_touch_attr_pointer_location.attr,
 	&lge_touch_attr_charger.attr,
+#ifdef CONFIG_DOUBLETAP_WAKE
+	&lge_touch_attr_dt_wake_enabled.attr,
+#endif
 	NULL,
 };
 
@@ -1627,7 +1847,7 @@ static const struct sysfs_ops lge_touch_sysfs_ops = {
 
 static struct kobj_type lge_touch_kobj_type = {
 	.sysfs_ops	= &lge_touch_sysfs_ops,
-	.default_attrs 	= lge_touch_attribute_list,
+	.default_attrs	= lge_touch_attribute_list,
 };
 
 static struct sysdev_class lge_touch_sys_class = {
@@ -1728,6 +1948,12 @@ static int touch_probe(struct i2c_client *client,
 		ret = -EPERM;
 		goto err_check_functionality_failed;
 	}
+	
+	/* Enable runtime PM ops, start in ACTIVE mode */
+	ret = pm_runtime_set_active(&client->dev);
+	if (ret < 0)
+		TOUCH_DEBUG_MSG("unable to set runtime pm state\n");
+	pm_runtime_enable(&client->dev);	
 
 	ts = kzalloc(sizeof(struct lge_touch_data), GFP_KERNEL);
 	if (ts == NULL) {
@@ -1860,7 +2086,8 @@ static int touch_probe(struct i2c_client *client,
 
 		ret = request_threaded_irq(client->irq, touch_irq_handler,
 				NULL,
-				ts->pdata->role->irqflags | IRQF_ONESHOT,
+				ts->pdata->role->irqflags | IRQF_ONESHOT |
+				IRQF_NO_SUSPEND,
 				client->name, ts);
 
 		if (ret < 0) {
@@ -1885,19 +2112,17 @@ static int touch_probe(struct i2c_client *client,
 	}
 
 	/* jitter solution */
-	if (ts->pdata->role->jitter_filter_enable) {
-		ts->jitter_filter.adjust_margin = 100;
-	}
+	ts->jitter_filter.adjust_margin = 100;
 
 	/* accuracy solution */
-	if (ts->pdata->role->accuracy_filter_enable) {
-		ts->accuracy_filter.ignore_pressure_gap = 5;
-		ts->accuracy_filter.delta_max = 100;
-		ts->accuracy_filter.max_pressure = 255;
-		ts->accuracy_filter.time_to_max_pressure = one_sec / 20;
-		ts->accuracy_filter.direction_count = one_sec / 6;
-		ts->accuracy_filter.touch_max_count = one_sec / 2;
-	}
+	ts->accuracy_filter.ignore_pressure_gap = 5;
+	ts->accuracy_filter.delta_max = 100;
+	ts->accuracy_filter.max_pressure = 255;
+	ts->accuracy_filter.time_to_max_pressure = one_sec / 20;
+	ts->accuracy_filter.direction_count = one_sec / 6;
+	ts->accuracy_filter.touch_max_count = one_sec / 2;
+
+	device_init_wakeup(&client->dev, 1);
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + 1;
@@ -1906,6 +2131,22 @@ static int touch_probe(struct i2c_client *client,
 	register_early_suspend(&ts->early_suspend);
 #endif
 
+#ifdef CONFIG_TOUCH_WAKE
+	touchwake_data = ts;
+#endif
+#ifdef CONFIG_DOUBLETAP_WAKE
+	mutex_init(&ts->dt_wake.lock);
+	ts->dt_wake.enabled = 0;
+	ts->dt_wake.pending_status = 0;
+	ts->dt_wake.hits = 0;
+	ts->dt_wake.time = 0;
+	ts->dt_wake.touch = 0;
+	ts->dt_wake.max_interval = DTW_MAX_INTERVAL;
+	ts->dt_wake.lock_timeout = msecs_to_jiffies(DTW_LOCK_TIMEOUT);
+	wake_lock_init(&ts->dt_wake.wlock, WAKE_LOCK_SUSPEND, "dt_wake");
+
+	input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
+#endif
 	/* Register sysfs for making fixed communication path to framework layer */
 	ret = sysdev_class_register(&lge_touch_sys_class);
 	if (ret < 0) {
@@ -1946,6 +2187,9 @@ err_lge_touch_sys_class_register:
 		gpio_free(ts->pdata->int_pin);
 		free_irq(ts->client->irq, ts);
 	}
+#ifdef CONFIG_DOUBLETAP_WAKE
+	wake_lock_destroy(&ts->dt_wake.wlock);
+#endif
 err_interrupt_failed:
 	input_unregister_device(ts->input_dev);
 err_input_register_device_failed:
@@ -1957,6 +2201,8 @@ err_assign_platform_data:
 	kfree(ts);
 err_alloc_data_failed:
 err_check_functionality_failed:
+	pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(&client->dev);
 	return ret;
 }
 
@@ -1967,6 +2213,14 @@ static int touch_remove(struct i2c_client *client)
 	if (unlikely(touch_debug_mask & DEBUG_TRACE))
 		TOUCH_DEBUG_MSG("\n");
 
+	pm_runtime_set_suspended(&client->dev);
+	pm_runtime_disable(&client->dev);
+
+	device_init_wakeup(&client->dev, 0);
+
+#ifdef CONFIG_DOUBLETAP_WAKE
+	wake_lock_destroy(&ts->dt_wake.wlock);
+#endif
 	/* Specific device remove */
 	if (touch_device_func->remove)
 		touch_device_func->remove(ts->client);
@@ -1995,52 +2249,33 @@ static int touch_remove(struct i2c_client *client)
 	return 0;
 }
 
-#if defined(CONFIG_HAS_EARLYSUSPEND)
-static void touch_early_suspend(struct early_suspend *h)
+static void touch_power_on(struct lge_touch_data *ts)
 {
-	struct lge_touch_data *ts =
-			container_of(h, struct lge_touch_data, early_suspend);
-
-	if (unlikely(touch_debug_mask & DEBUG_TRACE))
-		TOUCH_DEBUG_MSG("\n");
-
-	ts->curr_resume_state = 0;
-
-	if (ts->fw_upgrade.is_downloading == UNDER_DOWNLOADING) {
-		TOUCH_INFO_MSG("early_suspend is not executed\n");
-		return;
-	}
-
-	if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
-		disable_irq(ts->client->irq);
-	else
-		hrtimer_cancel(&ts->timer);
-
-	cancel_work_sync(&ts->work);
-	cancel_delayed_work_sync(&ts->work_init);
-	if (ts->pdata->role->key_type == TOUCH_HARD_KEY)
-		cancel_delayed_work_sync(&ts->work_touch_lock);
-
-	release_all_ts_event(ts);
-
-	touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
-}
-
-static void touch_late_resume(struct early_suspend *h)
-{
-	struct lge_touch_data *ts =
-			container_of(h, struct lge_touch_data, early_suspend);
-
 	if (unlikely(touch_debug_mask & DEBUG_TRACE))
 		TOUCH_DEBUG_MSG("\n");
 
 	ts->curr_resume_state = 1;
-
+	TOUCH_DEBUG_MSG("Power on. Resume state %u\n", ts->curr_resume_state);
 	if (ts->fw_upgrade.is_downloading == UNDER_DOWNLOADING) {
 		TOUCH_INFO_MSG("late_resume is not executed\n");
 		return;
 	}
 
+#ifdef CONFIG_DOUBLETAP_WAKE
+	if (ts->dt_wake.enabled) {
+		wake_unlock(&ts->dt_wake.wlock);
+		disable_irq_wake(ts->client->irq);
+
+		/* Reset touchscreen */
+		if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
+			disable_irq(ts->client->irq);
+		else
+			hrtimer_cancel(&ts->timer);
+		release_all_ts_event(ts);
+
+		touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
+	}
+#endif
 	touch_power_cntl(ts, ts->pdata->role->resume_pwr);
 
 	if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
@@ -2055,7 +2290,97 @@ static void touch_late_resume(struct early_suspend *h)
 			msecs_to_jiffies(ts->pdata->role->booting_delay));
 	else
 		queue_delayed_work(touch_wq, &ts->work_init, 0);
+
+
+#ifdef CONFIG_DOUBLETAP_WAKE
+	if (ts->dt_wake.pending) {
+		ts->dt_wake.enabled = ts->dt_wake.pending_status;
+		ts->dt_wake.pending = 0;
+	}
+#endif
 }
+
+static void touch_power_off(struct lge_touch_data *ts)
+{
+	if (unlikely(touch_debug_mask & DEBUG_TRACE))
+		TOUCH_DEBUG_MSG("\n");
+
+	ts->curr_resume_state = 0;
+	TOUCH_DEBUG_MSG("Power off. Resume state %u\n", ts->curr_resume_state);
+	if (ts->fw_upgrade.is_downloading == UNDER_DOWNLOADING) {
+		TOUCH_INFO_MSG("early_suspend is not executed\n");
+		return;
+	}
+#ifdef CONFIG_DOUBLETAP_WAKE
+	if (ts->dt_wake.enabled) {
+		cancel_work_sync(&ts->work);
+		cancel_delayed_work_sync(&ts->work_init);
+		release_all_ts_event(ts);
+		ts->dt_wake.hits = 0;
+		ts->dt_wake.touch = 0;
+		enable_irq_wake(ts->client->irq);
+	} else {
+#endif
+	if (ts->pdata->role->operation_mode == INTERRUPT_MODE)
+		disable_irq(ts->client->irq);
+	else
+		hrtimer_cancel(&ts->timer);
+
+	cancel_work_sync(&ts->work);
+	cancel_delayed_work_sync(&ts->work_init);
+	if (ts->pdata->role->key_type == TOUCH_HARD_KEY)
+		cancel_delayed_work_sync(&ts->work_touch_lock);
+
+	release_all_ts_event(ts);
+
+	touch_power_cntl(ts, ts->pdata->role->suspend_pwr);
+#ifdef CONFIG_DOUBLETAP_WAKE
+	}
+#endif
+}
+
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+static void touch_early_suspend(struct early_suspend *h)
+{
+	struct lge_touch_data *ts =
+			container_of(h, struct lge_touch_data, early_suspend);
+
+#ifdef CONFIG_TOUCH_WAKE
+	if (touchwake_is_enabled())
+		return;	/* touchwake will handle touchscreen suspend call */
+#endif
+	/* touchwake is not compiled or it's disabled - handle suspend */
+	touch_power_off(ts);
+}
+
+static void touch_late_resume(struct early_suspend *h)
+{
+	struct lge_touch_data *ts =
+			container_of(h, struct lge_touch_data, early_suspend);
+
+#ifdef CONFIG_TOUCH_WAKE
+	if (touchwake_is_enabled())
+		return;
+#endif
+	/* touchwake is not compiled or it's disabled - handle wake */
+	touch_power_on(ts);
+}
+#endif
+
+#ifdef CONFIG_TOUCH_WAKE
+void touchscreen_disable(void)
+{
+	suspending = 1;
+	touch_power_off(touchwake_data);
+	suspending = 0;
+}
+EXPORT_SYMBOL(touchscreen_disable);
+
+void touchscreen_enable(void)
+{
+	touch_power_on(touchwake_data);
+}
+EXPORT_SYMBOL(touchscreen_enable);
 #endif
 
 #if defined(CONFIG_PM)

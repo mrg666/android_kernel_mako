@@ -19,10 +19,31 @@
 #define LGE_TOUCH_CORE_H
 
 #include <linux/power_supply.h>
+#include <linux/wakelock.h>
 //#define LGE_TOUCH_TIME_DEBUG
 
 #define MAX_FINGER	10
 #define MAX_BUTTON	4
+
+#ifdef CONFIG_DOUBLETAP_WAKE
+
+#define DTW_MAX_INTERVAL	(700)
+#define DTW_TOUCH_AREA		(30)
+#define DTW_LOCK_TIMEOUT	(700)
+
+struct double_tap_wake {
+	unsigned int enabled;
+	unsigned int pending_status;
+	unsigned int pending;
+	unsigned int max_interval;
+	unsigned int lock_timeout;
+	unsigned int hits;
+	int touch;
+	unsigned long time;
+	struct wake_lock wlock;
+	struct mutex lock;
+};
+#endif
 
 struct touch_device_caps {
 	u8              button_support;
@@ -220,6 +241,9 @@ struct lge_touch_data {
 #ifdef CONFIG_TOUCHSCREEN_CHARGER_NOTIFY
 	struct power_supply             touch_psy;
 	struct work_struct              work_charger;
+#endif
+#ifdef CONFIG_DOUBLETAP_WAKE
+	struct double_tap_wake		dt_wake;
 #endif
 };
 

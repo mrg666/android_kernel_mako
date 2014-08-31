@@ -70,4 +70,5 @@ obj-$(CONFIG_QSEECOM) += qseecom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 obj-y += tspdrv/
 obj-$(CONFIG_BU52031NVX) += pm8xxx-cradle.o
+obj-$(CONFIG_TOUCH_WAKE) += touch_wake.o
 obj-$(CONFIG_SLIMPORT_ANX7808)	+= slimport_anx7808/
