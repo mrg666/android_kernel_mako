@@ -1604,7 +1604,7 @@ config SCHED_MC
 
 config ASMP
 	bool "Multi-core automatic hotplug support"
-	depends on SMP
+	depends on SMP && HOTPLUG_CPU
 	default n
 	help
 	  Automatically hotplugs the multiple cpu cores on and off
