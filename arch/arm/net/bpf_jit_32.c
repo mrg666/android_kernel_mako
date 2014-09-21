@@ -12,7 +12,7 @@
 #include <linux/compiler.h>
 #include <linux/errno.h>
 #include <linux/filter.h>
-#include <linux/moduleloader.h>
+#include <linux/vmalloc.h>
 #include <linux/netdevice.h>
 #include <linux/string.h>
 #include <linux/slab.h>
@@ -876,7 +876,7 @@ void bpf_jit_compile(struct sk_filter *fp)
 #endif
 
 	alloc_size = 4 * ctx.idx;
-	ctx.target = module_alloc(max(sizeof(struct work_struct),
+	ctx.target = vmalloc_exec(max(sizeof(struct work_struct),
 				      alloc_size));
 	if (unlikely(ctx.target == NULL))
 		goto out;
@@ -906,7 +906,7 @@ out:
 
 static void bpf_jit_free_worker(struct work_struct *work)
 {
-	module_free(NULL, work);
+	vfree(work);
 }
 
 void bpf_jit_free(struct sk_filter *fp)
