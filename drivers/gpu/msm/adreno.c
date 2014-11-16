@@ -575,8 +575,6 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 
 	kgsl_mmu_unmap(pagetable, &rb->buffer_desc);
 
-	kgsl_mmu_unmap(pagetable, &rb->memptrs_desc);
-
 	kgsl_mmu_unmap(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
@@ -585,25 +583,30 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 static int adreno_setup_pt(struct kgsl_device *device,
 			struct kgsl_pagetable *pagetable)
 {
-	int result = 0;
+	int result;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 
 	result = kgsl_mmu_map_global(pagetable, &rb->buffer_desc);
-	if (result)
-		goto error;
 
-	result = kgsl_mmu_map_global(pagetable, &rb->memptrs_desc);
-	if (result)
-		goto unmap_buffer_desc;
+	/*
+	 * ALERT: Order of these mapping is important to
+	 * Keep the most used entries like memstore
+	 * and mmu setstate memory by TLB prefetcher.
+	 */
 
-	result = kgsl_mmu_map_global(pagetable, &device->memstore);
-	if (result)
-		goto unmap_memptrs_desc;
+	if (!result)
+		result = kgsl_mmu_map_global(pagetable, &device->memstore);
 
-	result = kgsl_mmu_map_global(pagetable, &device->mmu.setstate_memory);
-	if (result)
-		goto unmap_memstore_desc;
+	if (!result)
+		result = kgsl_mmu_map_global(pagetable,
+			&device->mmu.setstate_memory);
+
+	if (result) {
+		/* On error clean up what we have wrought */
+		adreno_cleanup_pt(device, pagetable);
+		return result;
+	}
 
 	/*
 	 * Set the mpu end to the last "normal" global memory we use.
@@ -612,19 +615,8 @@ static int adreno_setup_pt(struct kgsl_device *device,
 	 */
 	device->mh.mpu_range = device->mmu.setstate_memory.gpuaddr +
 				device->mmu.setstate_memory.size;
-	return result;
 
-unmap_memstore_desc:
-	kgsl_mmu_unmap(pagetable, &device->memstore);
-
-unmap_memptrs_desc:
-	kgsl_mmu_unmap(pagetable, &rb->memptrs_desc);
-
-unmap_buffer_desc:
-	kgsl_mmu_unmap(pagetable, &rb->buffer_desc);
-
-error:
-	return result;
+	return 0;
 }
 
 static unsigned int _adreno_iommu_setstate_v0(struct kgsl_device *device,
@@ -2642,9 +2634,6 @@ struct kgsl_memdesc *adreno_find_region(struct kgsl_device *device,
 	*entry = NULL;
 	if (kgsl_gpuaddr_in_memdesc(&ringbuffer->buffer_desc, gpuaddr, size))
 		return &ringbuffer->buffer_desc;
-
-	if (kgsl_gpuaddr_in_memdesc(&ringbuffer->memptrs_desc, gpuaddr, size))
-		return &ringbuffer->memptrs_desc;
 
 	if (kgsl_gpuaddr_in_memdesc(&device->memstore, gpuaddr, size))
 		return &device->memstore;
