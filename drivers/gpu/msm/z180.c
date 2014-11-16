@@ -516,7 +516,7 @@ error_put:
 	kgsl_mem_entry_put(entry);
 error:
 	kgsl_trace_issueibcmds(device, context->id, cmdbatch,
-		*timestamp, cmdbatch->flags, result, 0);
+		*timestamp, cmdbatch ? cmdbatch->flags : 0, result, 0);
 
 	kgsl_active_count_put(device);
 error_active_count:
@@ -616,7 +616,6 @@ static int z180_start(struct kgsl_device *device, int priority)
 
 	z180_cmdstream_start(device);
 
-	mod_timer(&device->idle_timer, jiffies + FIRST_TIMEOUT);
 	kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_ON);
 	device->ftbl->irqctrl(device, 1);
 
