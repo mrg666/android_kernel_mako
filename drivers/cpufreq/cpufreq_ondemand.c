@@ -31,6 +31,7 @@
 #define DEF_SAMPLING_DOWN_FACTOR		(1)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
 #define MICRO_FREQUENCY_UP_THRESHOLD		(95)
+#define DEF_DOWN_THRESHOLD			(5)
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
@@ -172,6 +173,11 @@ static void od_check_cpu(int cpu, unsigned int load)
 			dbs_info->rate_mult =
 				od_tuners.sampling_down_factor;
 		dbs_freq_increase(policy, policy->max);
+	} else if (load < DEF_DOWN_THRESHOLD) {
+		/* No longer fully busy, reset rate_mult */
+		dbs_info->rate_mult = 1;
+		__cpufreq_driver_target(policy, policy->min,
+					CPUFREQ_RELATION_L);
 	} else {
 		/* Calculate the next frequency proportional to load */
 		unsigned int freq_next, min_f, max_f;
