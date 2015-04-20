@@ -145,6 +145,7 @@ static int __devinit pmic8xxx_pwrkey_probe(struct platform_device *pdev)
 
 	pwr->name = "pmic8xxx_pwrkey";
 	pwr->phys = "pmic8xxx_pwrkey/input0";
+	pwr->id.product = 8;
 	pwr->dev.parent = &pdev->dev;
 
 	delay = (pdata->kpd_trigger_delay_us << 6) / USEC_PER_SEC;

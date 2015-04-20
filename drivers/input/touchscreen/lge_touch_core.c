@@ -847,6 +847,79 @@ static void touch_input_dt_wake(struct lge_touch_data *ts)
 		}
 	}
 }
+
+static int pwr_pressed = 0;
+
+static void touch_input_event(struct input_handle *handle, unsigned int type,
+		unsigned int code, int value)
+{
+	if (type == EV_KEY && code == KEY_POWER) {
+		if (value == 1) {
+			TOUCH_INFO_MSG("Power key pressed");
+			pwr_pressed = 1;
+		} else {
+			TOUCH_INFO_MSG("Power key released");
+		}
+	}
+}
+
+static int touch_input_connect(struct input_handler *handler,
+		struct input_dev *dev, const struct input_device_id *id)
+{
+	struct input_handle *handle;
+	int error;
+
+	handle = kzalloc(sizeof(struct input_handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->name = "touch_handle";
+
+	error = input_register_handle(handle);
+	if (error)
+		goto err2;
+
+	error = input_open_device(handle);
+	if (error)
+		goto err1;
+
+	return 0;
+err1:
+	input_unregister_handle(handle);
+err2:
+	kfree(handle);
+	return error;
+}
+
+static void touch_input_disconnect(struct input_handle *handle)
+{
+	input_close_device(handle);
+	input_unregister_handle(handle);
+	kfree(handle);
+}
+
+static const struct input_device_id touch_ids[] = {
+	{
+		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+				INPUT_DEVICE_ID_MATCH_KEYBIT |
+				INPUT_DEVICE_ID_MATCH_PRODUCT,
+		.evbit = { BIT_MASK(EV_KEY) },
+		.keybit = { [BIT_WORD(KEY_POWER)] = BIT_MASK(KEY_POWER) },
+		.product = 8,
+	},
+	{ },
+};
+
+static struct input_handler touch_input_handler = {
+	.event		= touch_input_event,
+	.connect	= touch_input_connect,
+	.disconnect	= touch_input_disconnect,
+	.name		= "touch_dt",
+	.id_table	= touch_ids,
+};
+
 #endif
 
 static void touch_input_report(struct lge_touch_data *ts)
@@ -1752,6 +1825,31 @@ static ssize_t store_dt_wake_enabled(struct lge_touch_data *ts, const char *buf,
 
 	return count;
 }
+
+static ssize_t show_dt_wake_pwr_disable(struct lge_touch_data *ts, char *buf)
+{
+	int ret = 0;
+
+	ret = sprintf(buf, "%u\n", ts->dt_wake.pwr_disable);
+
+	return ret;
+}
+
+static ssize_t store_dt_wake_pwr_disable(struct lge_touch_data *ts, const char *buf,
+								size_t count)
+{
+	unsigned int value;
+	int ret;
+
+	ret = sscanf(buf, "%u", &value);
+	if (value < 0 || value > 1)
+		return -EINVAL;
+
+	ts->dt_wake.pwr_disable = value;
+
+	return count;
+}
+
 #endif
 
 static LGE_TOUCH_ATTR(platform_data, S_IRUGO | S_IWUSR, show_platform_data, NULL);
@@ -1770,6 +1868,8 @@ static LGE_TOUCH_ATTR(charger, S_IRUGO | S_IWUSR, show_charger, NULL);
 #ifdef CONFIG_DOUBLETAP_WAKE
 static LGE_TOUCH_ATTR(dt_wake_enabled, S_IRUGO | S_IWUSR, show_dt_wake_enabled,
 					store_dt_wake_enabled);
+static LGE_TOUCH_ATTR(dt_wake_pwr_disable, S_IRUGO | S_IWUSR,
+			show_dt_wake_pwr_disable, store_dt_wake_pwr_disable);
 #endif
 
 static struct attribute *lge_touch_attribute_list[] = {
@@ -1785,6 +1885,7 @@ static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_charger.attr,
 #ifdef CONFIG_DOUBLETAP_WAKE
 	&lge_touch_attr_dt_wake_enabled.attr,
+	&lge_touch_attr_dt_wake_pwr_disable.attr,
 #endif
 	NULL,
 };
@@ -2117,6 +2218,7 @@ static int touch_probe(struct i2c_client *client,
 #ifdef CONFIG_DOUBLETAP_WAKE
 	mutex_init(&ts->dt_wake.lock);
 	ts->dt_wake.enabled = 0;
+	ts->dt_wake.pwr_disable = 0;
 	ts->dt_wake.pending_status = 0;
 	ts->dt_wake.hits = 0;
 	ts->dt_wake.time = 0;
@@ -2126,6 +2228,8 @@ static int touch_probe(struct i2c_client *client,
 	wake_lock_init(&ts->dt_wake.wlock, WAKE_LOCK_SUSPEND, "dt_wake");
 
 	input_set_capability(ts->input_dev, EV_KEY, KEY_POWER);
+
+	ret = input_register_handler(&touch_input_handler);
 #endif
 	/* Register sysfs for making fixed communication path to framework layer */
 	ret = sysdev_class_register(&lge_touch_sys_class);
@@ -2200,6 +2304,7 @@ static int touch_remove(struct i2c_client *client)
 
 #ifdef CONFIG_DOUBLETAP_WAKE
 	wake_lock_destroy(&ts->dt_wake.wlock);
+	input_unregister_handler(&touch_input_handler);
 #endif
 	/* Specific device remove */
 	if (touch_device_func->remove)
@@ -2242,7 +2347,7 @@ static void touch_power_on(struct lge_touch_data *ts)
 	}
 
 #ifdef CONFIG_DOUBLETAP_WAKE
-	if (ts->dt_wake.enabled) {
+	if (ts->dt_wake.enabled && (!ts->dt_wake.pwr_disable || !pwr_pressed)) {
 		wake_unlock(&ts->dt_wake.wlock);
 		disable_irq_wake(ts->client->irq);
 
@@ -2277,6 +2382,7 @@ static void touch_power_on(struct lge_touch_data *ts)
 		ts->dt_wake.enabled = ts->dt_wake.pending_status;
 		ts->dt_wake.pending = 0;
 	}
+	pwr_pressed = 0;
 #endif
 }
 
@@ -2292,7 +2398,7 @@ static void touch_power_off(struct lge_touch_data *ts)
 		return;
 	}
 #ifdef CONFIG_DOUBLETAP_WAKE
-	if (ts->dt_wake.enabled) {
+	if (ts->dt_wake.enabled && (!ts->dt_wake.pwr_disable || !pwr_pressed)) {
 		cancel_work_sync(&ts->work);
 		cancel_delayed_work_sync(&ts->work_init);
 		release_all_ts_event(ts);
