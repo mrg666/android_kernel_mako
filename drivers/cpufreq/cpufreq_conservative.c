@@ -73,8 +73,6 @@ static void cs_check_cpu(int cpu, unsigned int load)
 			freq_target = 5;
 
 		dbs_info->requested_freq += freq_target;
-		if (dbs_info->requested_freq > policy->max)
-			dbs_info->requested_freq = policy->max;
 
 		__cpufreq_driver_target(policy, dbs_info->requested_freq,
 			CPUFREQ_RELATION_H);
@@ -90,8 +88,6 @@ static void cs_check_cpu(int cpu, unsigned int load)
 		freq_target = (cs_tuners->freq_step * policy->max) / 100;
 
 		dbs_info->requested_freq -= freq_target;
-		if (dbs_info->requested_freq < policy->min)
-			dbs_info->requested_freq = policy->min;
 
 		/*
 		 * if we cannot reduce the frequency anymore, break out early
