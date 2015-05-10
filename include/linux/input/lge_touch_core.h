@@ -28,7 +28,7 @@
 #ifdef CONFIG_DOUBLETAP_WAKE
 
 #define DTW_MAX_INTERVAL	(700)
-#define DTW_TOUCH_AREA		(30)
+#define DTW_TOUCH_AREA		(50)
 #define DTW_LOCK_TIMEOUT	(700)
 
 struct double_tap_wake {
@@ -39,6 +39,8 @@ struct double_tap_wake {
 	unsigned int max_interval;
 	unsigned int lock_timeout;
 	unsigned int hits;
+	u16 x_position[2];
+	u16 y_position[2];
 	int touch;
 	unsigned long time;
 	struct wake_lock wlock;
