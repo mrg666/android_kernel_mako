@@ -750,16 +750,6 @@ static void dump_pointer_trace(void)
 #endif
 
 #ifdef CONFIG_DOUBLETAP_WAKE
-
-/* Return zero for multi-touch double tap */
-static inline int touch_within_limits(struct lge_touch_data *ts, int id)
-{
-	return (abs(ts->dt_wake.x_position[0] - 
-		    ts->dt_wake.x_position[1]) < DTW_TOUCH_AREA &&
-		abs(ts->dt_wake.y_position[0] -
-		    ts->dt_wake.y_position[1]) < DTW_TOUCH_AREA);
-}
-
 static inline void touch_check_dt_wake(struct lge_touch_data *ts, int id)
 {
 	unsigned long diff_time;
@@ -801,7 +791,10 @@ static inline void touch_check_dt_wake(struct lge_touch_data *ts, int id)
 		return;
 	
 	/* Multi-touch douple tap. Reset hits and return */
-	if (!touch_within_limits(ts, id)) {
+	if (abs(ts->dt_wake.x_position[0] - 
+		ts->dt_wake.x_position[1]) > DTW_TOUCH_AREA ||
+	    abs(ts->dt_wake.y_position[0] -
+		ts->dt_wake.y_position[1]) > DTW_TOUCH_AREA) {
 		TOUCH_DEBUG_MSG("Multi-touch double tap\n");
 		goto reset;
 	}
