@@ -1311,6 +1311,7 @@ enum {
 	EXT4_STATE_DIO_UNWRITTEN,	/* need convert on dio done*/
 	EXT4_STATE_NEWENTRY,		/* File just added to dir */
 	EXT4_STATE_DELALLOC_RESERVED,	/* blks already reserved for delalloc */
+	EXT4_STATE_ORDERED_MODE,	/* data=ordered mode */
 };
 
 #define EXT4_INODE_BIT_FNS(name, field, offset)				\
