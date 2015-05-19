@@ -277,6 +277,12 @@ on a write to boostpulse, before allowing speed to drop according to
 load as usual.  Default is 80000 uS.
 
 
+sampling_down_factor: similar functionality as in "ondemand" governor.
+But in "conservative", it controls the rate at which the kernel makes
+a decision on when to decrease the frequency while running in any
+speed. Load for frequency increase is still evaluated every
+sampling rate.
+
 3. The Governor Interface in the CPUfreq Core
 =============================================
 
