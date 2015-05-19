@@ -96,7 +96,7 @@ static void cs_check_cpu(int cpu, unsigned int load)
 			return;
 
 		__cpufreq_driver_target(policy, dbs_info->requested_freq,
-				CPUFREQ_RELATION_H);
+				CPUFREQ_RELATION_L);
 		return;
 	}
 }
