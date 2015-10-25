@@ -906,7 +906,7 @@ void bpf_jit_compile(struct sk_filter *fp)
 		if (ctx.imm_count)
 			kfree(ctx.imms);
 #endif
-		module_free(NULL, ctx.target);
+		vfree(ctx.target);
 		goto out;
 	}
 	build_epilogue(&ctx);
